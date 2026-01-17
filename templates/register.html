@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>User Registration</title>
+    <!-- Bootstrap -->
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css">
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    <!-- Custom styles -->
+    <style>
+        .container {
+            max-width: 500px;  /* Limit the maximum width */
+            padding: 20px;  /* Padding around the form */
+            background-color: #f9f9f9;  /* Light background color */
+            border-radius: 10px;  /* Rounded corners */
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);  /* Light shadow for depth */
+        }
+        .error {
+            color: red;  /* Red color for error messages */
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>Please enter your information below to register:</h1>
+        <form action="/registerAuth" method="POST">
+            <!-- Error handling -->
+            {% if error %}
+            <p class="error"><strong>Error:</strong> {{ error }}</p>
+            {% endif %}
+
+
+            <!-- Form group for email -->
+            <div class="form-group">
+                <label for="email">Email:</label>
+                <input type="email" id="email" name="email" class="form-control" placeholder="johndoe@gmail.com" required/>
+            </div>
+
+            <!-- Form group for username -->
+            <div class="form-group">
+                <label for="username">Username:</label>
+                <input type="text" id="username" name="username" class="form-control" placeholder="username" required />
+            </div>
+
+            <!-- Form group for password -->
+            <div class="form-group">
+                <label for="password">Password:</label>
+                <input type="password" id="password" name="password" class="form-control" placeholder="password" required />
+            </div>
+
+            <div class="form-group">
+                <label for="code"> Code:</label>
+                <input type="password" id="code" name="code" class="form-control" placeholder="code" required />
+            </div>
+
+            <!-- Submit button -->
+            <button type="submit" class="btn btn-primary">Register</button>  <!-- Use Bootstrap button styling -->
+
+        </form>
+
+        <!-- Navigation link -->
+        <a href="/" class="btn btn-secondary mt-3"><i class="fas fa-arrow-left"></i> Go back</a>  <!-- Styled link -->
+    </div>
+
+</body>
+</html>
