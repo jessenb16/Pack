@@ -1,0 +1,34 @@
+# FastAPI Backend
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+python-multipart>=0.0.6  # For file uploads
+
+# Database
+pymongo>=4.6.0
+
+# Authentication (Clerk)
+requests>=2.31.0  # For Clerk API calls
+PyJWT>=2.8.0  # For JWT token decoding
+python-multipart>=0.0.6  # Form data
+
+# AWS S3
+boto3>=1.34.0
+
+# AI/LLM
+openai>=1.12.0
+langchain>=0.1.0
+langchain-openai>=0.0.5
+
+# Document Processing
+pypdf>=3.17.0
+Pillow>=10.0.0
+pdf2image>=1.16.0
+
+# Utilities
+python-dotenv>=1.0.0
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
+
+# CORS for Next.js
+fastapi-cors>=0.0.6
+
