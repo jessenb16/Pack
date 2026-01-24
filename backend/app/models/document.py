@@ -9,6 +9,7 @@ class DocumentMetadata(BaseModel):
     sender_name: str
     event_type: str
     doc_date: str
+    recipient_name: Optional[str] = None
 
 
 class DocumentCreate(BaseModel):

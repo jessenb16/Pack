@@ -1,5 +1,5 @@
 """Detective Tool for FastAPI."""
-from app.core.database import get_family_filter
+from app.core.database import get_org_filter
 from openai import OpenAI
 from app.core.config import settings
 from typing import List, Dict
@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 client = OpenAI(api_key=settings.OPENAI_API_KEY)
 
 
-def vector_search(family_id: str, query: str, db: Database, limit: int = 5) -> List[Dict]:
+def vector_search(org_id: str, query: str, db: Database, limit: int = 5) -> List[Dict]:
     """Perform vector search using Atlas Vector Search or fallback."""
     try:
         # Generate query embedding
@@ -28,7 +28,7 @@ def vector_search(family_id: str, query: str, db: Database, limit: int = 5) -> L
         # Try Atlas Vector Search
         try:
             pipeline = [
-                {"$match": {"family_id": family_id}},
+                {"$match": {"org_id": org_id}},
                 {
                     "$vectorSearch": {
                         "index": "vector_index",
@@ -62,10 +62,10 @@ def vector_search(family_id: str, query: str, db: Database, limit: int = 5) -> L
             logger.warning(f"Atlas Vector Search failed, using fallback: {e}")
             
             # Fallback to cosine similarity
-            family_filter = get_family_filter(family_id)
-            family_filter["ai_context.embedding"] = {"$exists": True}
+            org_filter = get_org_filter(org_id)
+            org_filter["ai_context.embedding"] = {"$exists": True}
             
-            all_docs = list(documents.find(family_filter))
+            all_docs = list(documents.find(org_filter))
             
             def cosine_similarity(vec1, vec2):
                 if not vec1 or not vec2:
@@ -149,9 +149,9 @@ Include references to which document the information came from."""
         return "I apologize, but I encountered an error while generating an answer."
 
 
-def execute_detective_query(family_id: str, query: str, db: Database) -> Dict:
+def execute_detective_query(org_id: str, query: str, db: Database) -> Dict:
     """Execute detective query: vector search + answer generation."""
-    relevant_docs = vector_search(family_id, query, db, limit=5)
+    relevant_docs = vector_search(org_id, query, db, limit=5)
     
     if not relevant_docs:
         return {

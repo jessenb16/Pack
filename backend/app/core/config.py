@@ -9,13 +9,7 @@ class Settings(BaseSettings):
     
     # Application
     APP_NAME: str = "Pack API"
-    DEBUG: bool = os.getenv("FLASK_ENV", "development") == "development"
-    SECRET_KEY: str = os.getenv("FLASK_SECRET_KEY", "dev-secret-key-change-in-production")
-    
-    # JWT
-    JWT_SECRET_KEY: str = os.getenv("JWT_SECRET_KEY", SECRET_KEY)
-    JWT_ALGORITHM: str = "HS256"
-    JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24 hours
+    DEBUG: bool = os.getenv("DEBUG", "false").lower() == "true"
     
     # MongoDB
     MONGODB_URI: str = os.getenv("MONGODB_URI", "mongodb://localhost:27017/")
@@ -32,6 +26,8 @@ class Settings(BaseSettings):
     
     # Clerk Authentication
     CLERK_SECRET_KEY: str = os.getenv("CLERK_SECRET_KEY", "")
+    CLERK_PUBLISHABLE_KEY: str = os.getenv("NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY", "")
+    CLERK_FRONTEND_API: Optional[str] = os.getenv("NEXT_PUBLIC_CLERK_FRONTEND_API", "")
     
     # File Upload
     MAX_CONTENT_LENGTH: int = int(os.getenv("MAX_CONTENT_LENGTH", 16 * 1024 * 1024))  # 16MB
@@ -43,6 +39,8 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         case_sensitive = True
+        # Allow extra fields from environment (needed for NEXT_PUBLIC_ prefixed vars)
+        extra = "ignore"
 
 
 settings = Settings()

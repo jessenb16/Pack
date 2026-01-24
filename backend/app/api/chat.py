@@ -33,20 +33,17 @@ async def ask_pack(
     db: Database = Depends(get_db)
 ):
     """Process a chat query using the RAG agent."""
-    if not current_user.get("family_id"):
+    org_id = current_user.get("org_id")
+    if not org_id:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User is not part of a family"
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User is not part of an organization"
         )
     
-    family_id = current_user["family_id"]
-    
     try:
-        # Import RAG agent (will need to adapt from Flask version)
-        # For now, we'll create a simple version
         from app.agents.rag_agent import RAGAgent
         
-        agent = RAGAgent(family_id, db)
+        agent = RAGAgent(org_id, db)
         result = agent.process_query(chat_query.query, chat_query.conversation_history)
         
         return ChatResponse(

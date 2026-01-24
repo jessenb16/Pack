@@ -1,5 +1,5 @@
 """Filter Tool for FastAPI."""
-from app.core.database import get_family_filter
+from app.core.database import get_org_filter
 from typing import List, Dict, Optional
 from pymongo.database import Database
 from bson import ObjectId
@@ -33,7 +33,7 @@ def parse_filter_query(query: str, available_event_types: List[str] = None) -> D
 
 
 def execute_filter_query(
-    family_id: str, 
+    org_id: str, 
     query: str, 
     family_members: List[str],
     available_event_types: List[str],
@@ -49,8 +49,8 @@ def execute_filter_query(
             sender_name = member
             break
     
-    # Build filter
-    filter_query = get_family_filter(family_id)
+    # Build filter using org_id
+    filter_query = get_org_filter(org_id)
     
     if sender_name:
         filter_query["metadata.sender_name"] = sender_name

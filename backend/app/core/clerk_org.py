@@ -3,10 +3,17 @@ import os
 import requests
 from typing import Optional, Dict
 import logging
+from time import time
+from functools import lru_cache
 
 logger = logging.getLogger(__name__)
 
 CLERK_API_URL = "https://api.clerk.com/v1"
+
+# Simple in-memory cache for Clerk API responses
+# Key: (function_name, org_id), Value: (data, timestamp)
+_clerk_cache: Dict[tuple, tuple] = {}
+CACHE_TTL = 60  # Cache for 60 seconds
 
 
 def get_clerk_secret_key() -> str:
@@ -83,6 +90,54 @@ def get_user_organizations(clerk_user_id: str) -> list:
             
     except Exception as e:
         logger.error(f"Error getting user organizations: {e}")
+        return []
+
+
+def get_organization_members(organization_id: str) -> list:
+    """Get all members of a Clerk organization (with caching)."""
+    cache_key = ("get_organization_members", organization_id)
+    current_time = time()
+    
+    # Check cache
+    if cache_key in _clerk_cache:
+        cached_data, timestamp = _clerk_cache[cache_key]
+        if current_time - timestamp < CACHE_TTL:
+            logger.debug(f"Cache hit for organization members: {organization_id}")
+            return cached_data
+    
+    try:
+        headers = {
+            "Authorization": f"Bearer {get_clerk_secret_key()}",
+            "Content-Type": "application/json"
+        }
+        
+        response = requests.get(
+            f"{CLERK_API_URL}/organizations/{organization_id}/memberships",
+            headers=headers,
+            timeout=5  # 5 second timeout to prevent hanging
+        )
+        
+        if response.status_code == 200:
+            result = response.json()
+            if isinstance(result, list):
+                data = result
+            elif isinstance(result, dict) and 'data' in result:
+                data = result['data']
+            else:
+                data = []
+            
+            # Cache the result
+            _clerk_cache[cache_key] = (data, current_time)
+            return data
+        else:
+            logger.warning(f"Failed to get organization members: {response.status_code}")
+            return []
+            
+    except requests.Timeout:
+        logger.warning(f"Timeout getting organization members for {organization_id}")
+        return []
+    except Exception as e:
+        logger.error(f"Error getting organization members: {e}")
         return []
 
 

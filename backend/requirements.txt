@@ -28,6 +28,8 @@ pdf2image>=1.16.0
 python-dotenv>=1.0.0
 pydantic>=2.5.0
 pydantic-settings>=2.1.0
+email-validator>=2.0.0
+werkzeug>=3.0.0
 
 # CORS for Next.js
 fastapi-cors>=0.0.6

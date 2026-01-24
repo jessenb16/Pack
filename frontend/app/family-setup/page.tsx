@@ -24,97 +24,18 @@ export default function FamilySetupPage() {
       return;
     }
 
-    checkFamily();
-  }, [user, isLoaded, orgListLoaded, organizationList]);
-
-  async function checkFamily() {
-    try {
-      // With "Membership required", Clerk will force org creation during signup
-      // So if user reaches here, they should already have an organization
-      if (organizationList && organizationList.length > 0) {
-        // User has a Clerk organization, sync it to MongoDB
-        await syncOrganizationToMongoDB();
-        return;
-      }
-      
-      // Check if family already exists in MongoDB (might be synced already)
-      const token = await getToken();
-      const response = await apiClient.getFamily(token);
-      
-      if (response.data) {
-        // User already has a family, redirect to dashboard
-        router.push('/dashboard');
-        return;
-      }
-      
-      // If we're here and user has no organization, they might have:
-      // 1. Signed up before "Membership required" was enabled
-      // 2. Or there's an issue - redirect to dashboard and let backend handle it
-      // The backend will sync on first API call, so just redirect
+    // If user already has an organization, redirect to dashboard
+    if (organizationList && organizationList.length > 0) {
       router.push('/dashboard');
-    } catch (error) {
-      console.error('Error checking family:', error);
-      // On error, redirect to dashboard - backend will handle sync
-      router.push('/dashboard');
-    }
-  }
-
-  async function syncOrganizationToMongoDB() {
-    if (!organizationList || organizationList.length === 0) {
-      setChecking(false);
       return;
     }
-    
-    setSyncing(true);
-    try {
-      // Make an API call to trigger automatic sync in get_current_user
-      // The backend will detect the organization and sync it to MongoDB
-      const token = await getToken();
-      
-      // Try multiple times with delays to allow sync to complete
-      for (let i = 0; i < 3; i++) {
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        const response = await apiClient.getFamily(token);
-        
-        if (response.data) {
-          // Family synced successfully, redirect to dashboard
-          router.push('/dashboard');
-          return;
-        }
-      }
-      
-      // If still not synced after retries, show error or allow manual retry
-      console.warn('Organization not synced after retries');
-      setChecking(false);
-    } catch (error) {
-      console.error('Error syncing organization:', error);
-      setChecking(false);
-    } finally {
-      setSyncing(false);
-    }
-  }
 
-  // Handle organization creation completion
-  const handleOrganizationCreated = async () => {
-    // Wait a moment for Clerk to process, then check for family
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    const token = await getToken();
-    const response = await apiClient.getFamily(token);
-    
-    if (response.data) {
-      router.push('/dashboard');
-    } else {
-      // Organization created but not synced yet, wait a bit more
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      const retryResponse = await apiClient.getFamily(token);
-      if (retryResponse.data) {
-        router.push('/dashboard');
-      }
-    }
-  };
+    // User doesn't have an organization, show the create form
+    setChecking(false);
+  }, [user, isLoaded, orgListLoaded, organizationList, router]);
 
-  if (!isLoaded || checking || syncing) {
+
+  if (!isLoaded || !orgListLoaded || checking) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <div className="text-lg">Loading...</div>

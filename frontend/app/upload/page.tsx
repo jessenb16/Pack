@@ -16,9 +16,11 @@ export default function UploadPage() {
   const [formData, setFormData] = useState({
     sender_name: '',
     event_type: '',
+    recipient_name: '',
     doc_date: new Date().toISOString().split('T')[0],
   });
-  const [members, setMembers] = useState<string[]>([]);
+  const [useCustomEventType, setUseCustomEventType] = useState(false);
+  const [members, setMembers] = useState<Array<{id: string; name: string; role: string}>>([]);
   const [eventTypes, setEventTypes] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -66,14 +68,23 @@ export default function UploadPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!file || !formData.sender_name || !formData.event_type || !formData.doc_date) {
-      alert('Please fill in all fields and select a file');
+      alert('Please fill in all required fields and select a file');
       return;
     }
 
     setUploading(true);
     try {
       const token = await getToken();
-      const response = await apiClient.uploadDocument(file, formData, token);
+      const response = await apiClient.uploadDocument(
+        file, 
+        {
+          sender_name: formData.sender_name,
+          event_type: formData.event_type,
+          recipient_name: formData.recipient_name || undefined,
+          doc_date: formData.doc_date
+        }, 
+        token
+      );
       
       if (response.data) {
         alert('Document uploaded successfully!');
@@ -154,8 +165,8 @@ export default function UploadPage() {
             >
               <option value="">Select sender...</option>
               {members.map((member) => (
-                <option key={member} value={member}>
-                  {member}
+                <option key={member.id} value={member.name}>
+                  {member.name}
                 </option>
               ))}
             </select>
@@ -164,27 +175,70 @@ export default function UploadPage() {
           {/* Event Type */}
           <div>
             <label className="mb-2 block text-sm font-medium text-gray-700">
-              Event Type
+              Event Type <span className="text-red-600">*</span>
             </label>
-            <select
-              value={formData.event_type}
-              onChange={(e) => setFormData({ ...formData, event_type: e.target.value })}
-              className="w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-red-900 focus:outline-none focus:ring-2 focus:ring-red-900"
-              required
-            >
-              <option value="">Select event type...</option>
-              {eventTypes.map((event) => (
-                <option key={event} value={event}>
-                  {event}
-                </option>
-              ))}
-            </select>
+            {!useCustomEventType ? (
+              <>
+                <select
+                  value={formData.event_type}
+                  onChange={(e) => setFormData({ ...formData, event_type: e.target.value })}
+                  className="w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-red-900 focus:outline-none focus:ring-2 focus:ring-red-900"
+                  required
+                >
+                  <option value="">Select event type...</option>
+                  {eventTypes.map((event) => (
+                    <option key={event} value={event}>
+                      {event}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setUseCustomEventType(true);
+                    setFormData({ ...formData, event_type: '' });
+                  }}
+                  className="mt-2 text-sm text-red-900 hover:underline"
+                >
+                  Or enter a new event type
+                </button>
+              </>
+            ) : (
+              <>
+                <input
+                  type="text"
+                  placeholder="Enter event type..."
+                  value={formData.event_type}
+                  onChange={(e) => setFormData({ ...formData, event_type: e.target.value })}
+                  className="w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-red-900 focus:outline-none focus:ring-2 focus:ring-red-900"
+                  required
+                  autoFocus
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setUseCustomEventType(false);
+                    setFormData({ ...formData, event_type: '' });
+                  }}
+                  className="mt-2 text-sm text-red-900 hover:underline"
+                >
+                  Or select from existing types
+                </button>
+              </>
+            )}
+          </div>
+
+          {/* Recipient (Optional) */}
+          <div>
+            <label className="mb-2 block text-sm font-medium text-gray-700">
+              Recipient <span className="text-gray-500 text-xs">(optional)</span>
+            </label>
             <input
               type="text"
-              placeholder="Or enter new event type..."
-              value={formData.event_type}
-              onChange={(e) => setFormData({ ...formData, event_type: e.target.value })}
-              className="mt-2 w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-red-900 focus:outline-none focus:ring-2 focus:ring-red-900"
+              placeholder="Who is this document for? (e.g., 'Mom', 'The Family')"
+              value={formData.recipient_name}
+              onChange={(e) => setFormData({ ...formData, recipient_name: e.target.value })}
+              className="w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-red-900 focus:outline-none focus:ring-2 focus:ring-red-900"
             />
           </div>
 

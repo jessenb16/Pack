@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useUser, useAuth } from '@clerk/nextjs';
+import { useUser, useAuth, useOrganization } from '@clerk/nextjs';
 import { useRouter } from 'next/navigation';
 import Navbar from '@/components/Navbar';
 import { apiClient } from '@/lib/api';
@@ -17,6 +17,7 @@ interface Invitation {
 export default function FamilySettingsPage() {
   const { user, isLoaded } = useUser();
   const { getToken } = useAuth();
+  const { organization } = useOrganization();
   const router = useRouter();
   const [family, setFamily] = useState<any>(null);
   const [members, setMembers] = useState<any[]>([]);
@@ -35,36 +36,51 @@ export default function FamilySettingsPage() {
     }
 
     loadFamilyData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, isLoaded]);
 
   async function loadFamilyData() {
     try {
       setLoading(true);
+      // Get token - backend will fetch org from Clerk API if not in token
       const token = await getToken();
       
-      // Load family info
-      const familyResponse = await apiClient.getFamily(token);
+      if (!token) {
+        setMessage({ type: 'error', text: 'Failed to get authentication token' });
+        setLoading(false);
+        return;
+      }
+      
+      // Make all API calls in parallel for better performance
+      const [familyResponse, invitationsResponse] = await Promise.all([
+        apiClient.getFamily(token),
+        apiClient.getInvitations(token).catch(err => ({ error: err.message })) // Don't fail if invitations fail
+      ]);
+      
+      // Handle family response (includes members already)
       if (familyResponse.data) {
         setFamily(familyResponse.data);
+        // Members are already included in familyResponse.data.members
+        setMembers(familyResponse.data.members || []);
       } else if (familyResponse.error) {
+        // If user doesn't have an organization, redirect to setup
+        if (familyResponse.error.includes('not part of an organization') || 
+            familyResponse.error.includes('404')) {
+          router.push('/family-setup');
+          return;
+        }
         setMessage({ type: 'error', text: familyResponse.error });
         setLoading(false);
         return;
       }
       
-      // Load members
-      const membersResponse = await apiClient.getFamilyMembers(token);
-      if (membersResponse.data) {
-        setMembers(membersResponse.data);
-      }
-      
-      // Load invitations
-      const invitationsResponse = await apiClient.getInvitations(token);
+      // Handle invitations response
       if (invitationsResponse.data) {
         setInvitations(invitationsResponse.data);
       } else if (invitationsResponse.error) {
-        // Invitations might fail if user doesn't have permission, but that's okay
+        // Invitations might fail if user doesn't have permission, that's okay
         console.warn('Could not load invitations:', invitationsResponse.error);
+        setInvitations([]);
       }
     } catch (error) {
       console.error('Error loading family data:', error);
@@ -83,6 +99,12 @@ export default function FamilySettingsPage() {
 
     try {
       const token = await getToken();
+      
+      if (!token) {
+        setMessage({ type: 'error', text: 'Failed to get authentication token' });
+        setSending(false);
+        return;
+      }
       const response = await apiClient.sendInvitation(inviteEmail.trim(), token);
       
       if (response.data) {
@@ -109,6 +131,11 @@ export default function FamilySettingsPage() {
 
     try {
       const token = await getToken();
+      
+      if (!token) {
+        setMessage({ type: 'error', text: 'Failed to get authentication token' });
+        return;
+      }
       const response = await apiClient.revokeInvitation(invitationId, token);
       
       if (response.data) {
@@ -127,7 +154,7 @@ export default function FamilySettingsPage() {
     }
   }
 
-  if (!isLoaded || loading) {
+  if (!isLoaded) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-red-900" />
@@ -152,6 +179,13 @@ export default function FamilySettingsPage() {
       
       <main className="container mx-auto max-w-4xl px-4 py-8">
         <h1 className="mb-8 text-3xl font-bold text-gray-900">Family Settings</h1>
+        
+        {loading && (
+          <div className="mb-4 flex items-center justify-center">
+            <Loader2 className="h-5 w-5 animate-spin text-red-900" />
+            <span className="ml-2 text-gray-600">Loading...</span>
+          </div>
+        )}
 
         {/* Family Info */}
         <section className="mb-8 rounded-lg bg-white p-6 shadow">

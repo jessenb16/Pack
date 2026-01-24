@@ -12,6 +12,9 @@ export default function RegisterPage() {
           <p className="mt-2 text-white/90">
             Create your family archive account
           </p>
+          <p className="mt-1 text-sm text-white/80">
+            Please enter your first and last name so family members can identify you
+          </p>
         </div>
         <div className="rounded-lg bg-white p-8 shadow-xl">
           <SignUp 
@@ -20,6 +23,16 @@ export default function RegisterPage() {
             signInUrl="/login"
             fallbackRedirectUrl="/dashboard"
             forceRedirectUrl="/dashboard"
+            appearance={{
+              elements: {
+                formButtonPrimary: "bg-red-900 hover:bg-red-800",
+                card: "shadow-none",
+              }
+            }}
+            // Ensure first name and last name fields are shown
+            additionalOAuthScopes={{
+              google: "profile email",
+            }}
           />
         </div>
         <p className="mt-4 text-center text-white/80">

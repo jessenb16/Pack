@@ -1,22 +1,25 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useUser, useAuth } from '@clerk/nextjs';
+import { useUser, useAuth, useOrganization } from '@clerk/nextjs';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Navbar from '@/components/Navbar';
+import DocumentViewer from '@/components/DocumentViewer';
 import { apiClient } from '@/lib/api';
 import { Calendar, Image as ImageIcon, Loader2, Mail, Users, ArrowRight } from 'lucide-react';
 
 export default function DashboardPage() {
   const { user, isLoaded } = useUser();
   const { getToken } = useAuth();
+  const { organization } = useOrganization();
   const router = useRouter();
   const [recentDocs, setRecentDocs] = useState<any[]>([]);
   const [onThisDay, setOnThisDay] = useState<any[]>([]);
   const [family, setFamily] = useState<any>(null);
   const [members, setMembers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedDoc, setSelectedDoc] = useState<any>(null);
 
   useEffect(() => {
     if (!isLoaded) return;
@@ -27,34 +30,51 @@ export default function DashboardPage() {
     }
 
     loadDashboard();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, isLoaded]);
 
   async function loadDashboard() {
     try {
+      // Get token - backend will fetch org from Clerk API if not in token
       const token = await getToken();
       
-      // Load family info
-      const familyResponse = await apiClient.getFamily(token);
+      if (!token) {
+        console.error('Failed to get token from Clerk');
+        setLoading(false);
+        return;
+      }
+      
+      // Make all API calls in parallel for better performance
+      const [familyResponse, documentsResponse] = await Promise.all([
+        apiClient.getFamily(token),
+        apiClient.getDocuments(undefined, token)
+      ]);
+      
+      // Handle family response (includes members already)
       if (familyResponse.data) {
         setFamily(familyResponse.data);
-        
-        // Load members
-        const membersResponse = await apiClient.getFamilyMembers(token);
-        if (membersResponse.data) {
-          setMembers(membersResponse.data);
+        // Members are already included in familyResponse.data.members
+        setMembers(familyResponse.data.members || []);
+      } else if (familyResponse.error) {
+        // If error is about no organization, that's okay - user just needs to create one
+        if (familyResponse.error.includes('not part of an organization') || 
+            familyResponse.error.includes('404') ||
+            familyResponse.error.includes('403')) {
+          setFamily(null);
+          setMembers([]);
+        } else {
+          console.error('Error loading family:', familyResponse.error);
         }
       }
       
-      // Load documents
-      const response = await apiClient.getDocuments(undefined, token);
-      
-      if (response.data) {
-        setRecentDocs(response.data.slice(0, 20));
+      // Handle documents response
+      if (documentsResponse.data) {
+        setRecentDocs(documentsResponse.data.slice(0, 20));
         
         // Get "On This Day" documents
         const today = new Date();
         const todayStr = `${today.getMonth() + 1}-${today.getDate()}`;
-        const onThisDayDocs = response.data.filter((doc: any) => {
+        const onThisDayDocs = documentsResponse.data.filter((doc: any) => {
           const docDate = doc.metadata?.doc_date;
           if (!docDate) return false;
           const date = new Date(docDate);
@@ -70,7 +90,7 @@ export default function DashboardPage() {
     }
   }
 
-  if (!isLoaded || loading) {
+  if (!isLoaded) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-red-900" />
@@ -83,10 +103,50 @@ export default function DashboardPage() {
       <Navbar />
       
       <main className="mx-auto max-w-7xl px-4 py-8">
+        {/* Document Viewer Modal */}
+        <DocumentViewer
+          isOpen={!!selectedDoc}
+          onClose={() => setSelectedDoc(null)}
+          document={selectedDoc}
+        />
+        
         <h1 className="mb-8 text-3xl font-bold text-gray-900">Dashboard</h1>
         
+        {loading && (
+          <div className="mb-4 flex items-center justify-center">
+            <Loader2 className="h-5 w-5 animate-spin text-red-900" />
+            <span className="ml-2 text-gray-600">Loading...</span>
+          </div>
+        )}
+        
+        {/* No Organization Message */}
+        {!loading && !family && (
+          <section className="mb-8 rounded-lg border-2 border-yellow-400 bg-gradient-to-r from-yellow-50 to-yellow-100 p-6 shadow-lg">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="rounded-full bg-yellow-400 p-3">
+                  <Users className="h-6 w-6 text-yellow-900" />
+                </div>
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-900">Create Your Family Organization</h2>
+                  <p className="text-gray-600">
+                    Create a family organization to start organizing your memories and inviting family members.
+                  </p>
+                </div>
+              </div>
+              <Link
+                href="/family-setup"
+                className="flex items-center gap-2 rounded-lg bg-red-900 px-6 py-3 text-white transition-colors hover:bg-red-800"
+              >
+                <span>Create Family</span>
+                <ArrowRight className="h-5 w-5" />
+              </Link>
+            </div>
+          </section>
+        )}
+
         {/* Invite Family Members - Prominent Section */}
-        {family && (
+        {!loading && family && (
           <section className="mb-8 rounded-lg border-2 border-red-900 bg-gradient-to-r from-red-50 to-yellow-50 p-6 shadow-lg">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
@@ -117,7 +177,11 @@ export default function DashboardPage() {
         {/* Recent Uploads */}
         <section className="mb-12">
           <h2 className="mb-4 text-2xl font-semibold text-gray-800">Recent Uploads</h2>
-          {recentDocs.length === 0 ? (
+          {loading ? (
+            <div className="flex h-48 items-center justify-center rounded-lg border border-dashed border-gray-300 bg-gray-50">
+              <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+            </div>
+          ) : recentDocs.length === 0 ? (
             <p className="text-gray-600">No documents yet. Upload your first memory!</p>
           ) : (
             <div className="grid grid-cols-2 gap-4 md:grid-cols-4 lg:grid-cols-6">
@@ -125,6 +189,7 @@ export default function DashboardPage() {
                 <div
                   key={doc.id}
                   className="group cursor-pointer overflow-hidden rounded-lg bg-white shadow transition-shadow hover:shadow-lg"
+                  onClick={() => setSelectedDoc(doc)}
                 >
                   <img
                     src={doc.s3_thumbnail_url}
@@ -144,7 +209,7 @@ export default function DashboardPage() {
         </section>
 
         {/* On This Day */}
-        {onThisDay.length > 0 && (
+        {!loading && onThisDay.length > 0 && (
           <section>
             <div className="mb-4 flex items-center gap-2">
               <Calendar className="h-6 w-6 text-red-900" />
@@ -155,6 +220,7 @@ export default function DashboardPage() {
                 <div
                   key={doc.id}
                   className="group cursor-pointer overflow-hidden rounded-lg bg-white shadow transition-shadow hover:shadow-lg"
+                  onClick={() => setSelectedDoc(doc)}
                 >
                   <img
                     src={doc.s3_thumbnail_url}

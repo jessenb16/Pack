@@ -8,6 +8,10 @@ from app.core.config import settings
 import logging
 from typing import Tuple
 
+# SYSTEM REQUIREMENT: This module requires 'poppler-utils' to be installed.
+# On Mac: brew install poppler
+# On Linux/Render: sudo apt-get install poppler-utils
+
 logger = logging.getLogger(__name__)
 
 client = OpenAI(api_key=settings.OPENAI_API_KEY)
@@ -99,10 +103,18 @@ def extract_text_from_image(file_data_base64: str, filename: str) -> str:
 
 
 def create_embedding(text: str) -> list:
-    """Create vector embedding using OpenAI."""
+    """
+    Create vector embedding using OpenAI.
+    
+    Returns empty list if text is empty/None to avoid creating meaningless
+    "garbage vectors" that sit in the center of embedding space.
+    """
     try:
-        if not text:
-            text = " "
+        # Skip embedding for empty text - better to have no embedding than a meaningless one
+        if not text or not text.strip():
+            logger.debug("Skipping embedding creation for empty text")
+            return []
+        
         response = client.embeddings.create(
             model="text-embedding-3-small",
             input=text
@@ -142,10 +154,12 @@ def process_document(file_data: bytes, filename: str) -> dict:
             # Convert image to base64 for API
             import base64
             img_base64 = base64.b64encode(file_data).decode('utf-8')
-            text_content = extract_text_from_image(img_base64, filename)
+            # text_content = extract_text_from_image(img_base64, filename)
+            text_content = ""
         
         # Generate embedding
-        embedding = create_embedding(text_content or "")
+        # embedding = create_embedding(text_content or "")
+        embedding = []
         
         return {
             'thumbnail_data': thumbnail_data,

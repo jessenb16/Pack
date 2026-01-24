@@ -92,6 +92,7 @@ class ApiClient {
   async uploadDocument(file: File, metadata: {
     sender_name: string;
     event_type: string;
+    recipient_name?: string;
     doc_date: string;
   }, token?: string | null) {
     const formData = new FormData();
@@ -99,6 +100,9 @@ class ApiClient {
     formData.append('sender_name', metadata.sender_name);
     formData.append('event_type', metadata.event_type);
     formData.append('doc_date', metadata.doc_date);
+    if (metadata.recipient_name) {
+      formData.append('recipient_name', metadata.recipient_name);
+    }
 
     const url = `${this.baseUrl}/api/documents/upload`;
     const headers: HeadersInit = {};

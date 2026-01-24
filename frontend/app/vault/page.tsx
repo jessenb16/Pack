@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useUser, useAuth } from '@clerk/nextjs';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Navbar from '@/components/Navbar';
+import DocumentViewer from '@/components/DocumentViewer';
 import { apiClient } from '@/lib/api';
 import { X, Loader2 } from 'lucide-react';
 
@@ -17,6 +18,7 @@ export default function VaultPage() {
   const [senders, setSenders] = useState<string[]>([]);
   const [eventTypes, setEventTypes] = useState<string[]>([]);
   const [years, setYears] = useState<number[]>([]);
+  const [selectedDoc, setSelectedDoc] = useState<any>(null);
   
   const [filters, setFilters] = useState({
     sender: searchParams.get('sender') || '',
@@ -33,7 +35,8 @@ export default function VaultPage() {
     }
 
     loadDocuments();
-  }, [user, isLoaded, filters]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, isLoaded, filters.sender, filters.event_type, filters.year]);
 
   async function loadDocuments() {
     try {
@@ -51,23 +54,26 @@ export default function VaultPage() {
       if (response.data) {
         setDocuments(response.data);
         
-        // Extract unique values for Smart Chips
-        const uniqueSenders = new Set<string>();
-        const uniqueEvents = new Set<string>();
-        const uniqueYears = new Set<number>();
-        
-        response.data.forEach((doc: any) => {
-          if (doc.metadata?.sender_name) uniqueSenders.add(doc.metadata.sender_name);
-          if (doc.metadata?.event_type) uniqueEvents.add(doc.metadata.event_type);
-          if (doc.metadata?.doc_date) {
-            const year = new Date(doc.metadata.doc_date).getFullYear();
-            uniqueYears.add(year);
-          }
-        });
-        
-        setSenders(Array.from(uniqueSenders).sort());
-        setEventTypes(Array.from(uniqueEvents).sort());
-        setYears(Array.from(uniqueYears).sort((a, b) => b - a));
+        // Only extract unique values for Smart Chips if we don't have them yet
+        // (to avoid unnecessary processing on filter changes)
+        if (senders.length === 0 || eventTypes.length === 0 || years.length === 0) {
+          const uniqueSenders = new Set<string>();
+          const uniqueEvents = new Set<string>();
+          const uniqueYears = new Set<number>();
+          
+          response.data.forEach((doc: any) => {
+            if (doc.metadata?.sender_name) uniqueSenders.add(doc.metadata.sender_name);
+            if (doc.metadata?.event_type) uniqueEvents.add(doc.metadata.event_type);
+            if (doc.metadata?.doc_date) {
+              const year = new Date(doc.metadata.doc_date).getFullYear();
+              uniqueYears.add(year);
+            }
+          });
+          
+          setSenders(Array.from(uniqueSenders).sort());
+          setEventTypes(Array.from(uniqueEvents).sort());
+          setYears(Array.from(uniqueYears).sort((a, b) => b - a));
+        }
       }
     } catch (error) {
       console.error('Error loading documents:', error);
@@ -112,6 +118,13 @@ export default function VaultPage() {
       <Navbar />
       
       <main className="mx-auto max-w-7xl px-4 py-8">
+        {/* Document Viewer Modal */}
+        <DocumentViewer
+          isOpen={!!selectedDoc}
+          onClose={() => setSelectedDoc(null)}
+          document={selectedDoc}
+        />
+
         <h1 className="mb-8 text-3xl font-bold text-gray-900">The Vault</h1>
         
         {/* Smart Chips Filter */}
@@ -214,6 +227,7 @@ export default function VaultPage() {
               <div
                 key={doc.id}
                 className="group cursor-pointer overflow-hidden rounded-lg bg-white shadow transition-shadow hover:shadow-lg"
+                onClick={() => setSelectedDoc(doc)}
               >
                 <img
                   src={doc.s3_thumbnail_url}

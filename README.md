@@ -17,6 +17,10 @@ A modern web application for preserving and searching family memories using AI-p
 
 See `MONGODB_SETUP.md` for detailed instructions.
 
+### 2. Set Up AWS S3
+
+See `S3_SETUP.md` for detailed instructions on setting up S3 with signed URLs for secure file storage.
+
 **Quick steps:**
 1. Create account at https://www.mongodb.com/cloud/atlas
 2. Create free cluster
@@ -24,7 +28,7 @@ See `MONGODB_SETUP.md` for detailed instructions.
 4. Whitelist your IP (0.0.0.0/0 for development)
 5. Get connection string
 
-### 2. Set Up Backend
+### 3. Set Up Backend
 
 ```bash
 cd backend
@@ -53,7 +57,7 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 Or use: `./run.sh`
 
-### 3. Set Up Frontend
+### 4. Set Up Frontend
 
 ```bash
 cd frontend
@@ -71,7 +75,7 @@ Start frontend:
 npm run dev
 ```
 
-### 4. Set Up Clerk
+### 5. Set Up Clerk
 
 1. Create account at https://clerk.com
 2. Create application

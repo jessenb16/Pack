@@ -1,9 +1,8 @@
-"""Clerk webhook endpoints for user/organization sync."""
-from fastapi import APIRouter, Request, HTTPException, status, Header
+"""Clerk webhook endpoints."""
+from fastapi import APIRouter, Request, HTTPException, status
 from app.core.database import get_db
-from app.core.clerk_user_sync import sync_clerk_user_to_mongodb, sync_clerk_organization_to_mongodb, link_user_to_family
 from app.core.clerk_auth import get_clerk_secret_key
-from pymongo.database import Database
+from app.services.org_settings import get_org_settings
 import hmac
 import hashlib
 import json
@@ -72,54 +71,16 @@ async def clerk_webhook(request: Request):
         
         db = get_db()
         
-        if event_type == "user.created" or event_type == "user.updated":
-            # Sync user to MongoDB
-            clerk_user_id = data.get("id")
-            if clerk_user_id:
-                sync_clerk_user_to_mongodb(clerk_user_id, db)
-        
-        elif event_type == "organization.created" or event_type == "organization.updated":
-            # Sync organization to MongoDB
+        # Only handle organization creation to initialize org_settings
+        if event_type == "organization.created":
             clerk_org_id = data.get("id")
             if clerk_org_id:
-                sync_clerk_organization_to_mongodb(clerk_org_id, db)
+                # Initialize org_settings for new organization
+                get_org_settings(clerk_org_id, db)
+                logger.info(f"Initialized org_settings for organization: {clerk_org_id}")
         
-        elif event_type == "organizationMembership.created":
-            # User joined an organization
-            org_id = data.get("organization", {}).get("id") or data.get("organization_id")
-            user_id = data.get("public_user_data", {}).get("user_id") or data.get("user_id")
-            
-            if org_id and user_id:
-                # Sync both user and org first
-                user = sync_clerk_user_to_mongodb(user_id, db)
-                family = sync_clerk_organization_to_mongodb(org_id, db)
-                
-                if user and family:
-                    # Link user to family
-                    link_user_to_family(str(user["_id"]), str(family["_id"]), db)
-        
-        elif event_type == "organizationMembership.deleted":
-            # User left an organization
-            org_id = data.get("organization", {}).get("id") or data.get("organization_id")
-            user_id = data.get("public_user_data", {}).get("user_id") or data.get("user_id")
-            
-            if org_id and user_id:
-                # Find user and remove from family
-                user = db.users.find_one({"clerk_user_id": user_id})
-                family = db.families.find_one({"clerk_org_id": org_id})
-                
-                if user and family:
-                    # Remove user from family
-                    db.families.update_one(
-                        {"_id": family["_id"]},
-                        {"$pull": {"members": str(user["_id"])}}
-                    )
-                    
-                    # Clear user's family_id if this was their only family
-                    db.users.update_one(
-                        {"_id": user["_id"]},
-                        {"$set": {"family_id": None}}
-                    )
+        # All other events (user updates, org updates, memberships) are handled by Clerk
+        # We don't need to sync anything to MongoDB since we use Clerk as source of truth
         
         return {"received": True}
         
