@@ -106,3 +106,7 @@ We use **LangGraph** to build a reactive agent that routes user queries to the c
   "sender_names": ["Mom", "Dad", "Grandma"],
   "recipient_names": ["Sam", "Jessica", "The Family"]
 }
+```
+
+**Collections: `checkpoints`, `checkpoint_writes`**
+* Used by LangGraph (AsyncMongoDBSaver) for chat conversation state. Created automatically by langgraph-checkpoint-mongodb; same database as the app (e.g. `pack`). See DEPLOYMENT.md for production setup.

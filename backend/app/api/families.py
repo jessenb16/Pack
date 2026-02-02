@@ -73,6 +73,7 @@ async def get_my_family(
         members.append({
             "id": public_user_data.get("user_id", ""),
             "name": name,
+            "email": public_user_data.get("identifier", ""),
             "role": membership.get("role", "member")
         })
     
@@ -82,6 +83,7 @@ async def get_my_family(
     return {
         "id": org_id,
         "name": clerk_org.get("name", "Family"),
+        "created_at": clerk_org.get("created_at"),
         "members": members,
         "event_types": org_settings.get("event_types", []),
         "sender_names": org_settings.get("sender_names", []),

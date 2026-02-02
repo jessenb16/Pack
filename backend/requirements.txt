@@ -10,6 +10,7 @@ motor>=3.3.0  # Async MongoDB driver for agent service
 # Authentication (Clerk)
 requests>=2.31.0  # For Clerk API calls
 PyJWT>=2.8.0  # For JWT token decoding
+svix>=1.0.0  # Clerk webhook signature verification
 python-multipart>=0.0.6  # Form data
 
 # AWS S3
