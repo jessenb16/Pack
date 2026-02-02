@@ -220,8 +220,8 @@ export ECR_REPO=pack-backend
 # 1. Log in to ECR
 aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
 
-# 2. Build
-docker build -t pack-backend:latest ./backend
+# 2. Build (use linux/amd64 so the image runs on Lightsail; required on Apple Silicon)
+docker build --platform linux/amd64 -t pack-backend:latest ./backend
 
 # 3. Tag for ECR (use colon before "latest")
 docker tag pack-backend:latest $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO:latest

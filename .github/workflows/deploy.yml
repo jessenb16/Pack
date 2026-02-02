@@ -13,7 +13,7 @@ env:
   AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
   ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY || 'pack-backend' }}
   LIGHTSAIL_SERVICE_NAME: ${{ vars.LIGHTSAIL_SERVICE_NAME || 'pack-backend' }}
-  CONTAINER_NAME: pack-backend
+  CONTAINER_NAME: packbackend
 
 jobs:
   ci:
@@ -70,7 +70,7 @@ jobs:
         env:
           ECR_REGISTRY: ${{ steps.ecr-login.outputs.registry }}
         run: |
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:latest -t $ECR_REGISTRY/$ECR_REPOSITORY:${{ github.sha }} ./backend
+          docker build --platform linux/amd64 -t $ECR_REGISTRY/$ECR_REPOSITORY:latest -t $ECR_REGISTRY/$ECR_REPOSITORY:${{ github.sha }} ./backend
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:${{ github.sha }}
           echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:latest" >> $GITHUB_OUTPUT
