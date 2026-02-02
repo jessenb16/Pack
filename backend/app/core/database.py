@@ -1,6 +1,8 @@
 """MongoDB database connection."""
 from pymongo import MongoClient
 from pymongo.database import Database
+from motor.motor_asyncio import AsyncIOMotorClient
+from motor.motor_asyncio import AsyncIOMotorDatabase
 from app.core.config import settings
 from typing import Optional
 import logging
@@ -9,6 +11,10 @@ logger = logging.getLogger(__name__)
 
 _client: Optional[MongoClient] = None
 _db: Optional[Database] = None
+
+# Async clients for agent service
+_async_client: Optional[AsyncIOMotorClient] = None
+_async_db: Optional[AsyncIOMotorDatabase] = None
 
 
 def get_client() -> MongoClient:
@@ -78,4 +84,28 @@ def get_org_filter(org_id: str) -> dict:
     All documents should be filtered by org_id for security.
     """
     return {"org_id": org_id}
+
+
+def get_async_client() -> AsyncIOMotorClient:
+    """Get async MongoDB client (singleton) for agent service."""
+    global _async_client
+    if _async_client is None:
+        try:
+            _async_client = AsyncIOMotorClient(
+                settings.MONGODB_URI,
+                serverSelectionTimeoutMS=5000
+            )
+            logger.info("Async MongoDB connection established successfully")
+        except Exception as e:
+            logger.error(f"Async MongoDB connection failed: {e}")
+            raise
+    return _async_client
+
+
+async def get_database() -> AsyncIOMotorDatabase:
+    """Get async MongoDB database (singleton) for agent service."""
+    global _async_db
+    if _async_db is None:
+        _async_db = get_async_client()[settings.DATABASE_NAME]
+    return _async_db
 

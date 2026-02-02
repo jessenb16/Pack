@@ -154,7 +154,7 @@ export default function FamilySettingsPage() {
     }
   }
 
-  if (!isLoaded) {
+  if (!isLoaded || loading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-red-900" />
@@ -174,11 +174,11 @@ export default function FamilySettingsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gradient-to-br from-stone-100 via-slate-50 to-stone-100">
       <Navbar />
       
       <main className="container mx-auto max-w-4xl px-4 py-8">
-        <h1 className="mb-8 text-3xl font-bold text-gray-900">Family Settings</h1>
+        <h1 className="mb-8 text-3xl font-bold text-gray-800">Family Settings</h1>
         
         {loading && (
           <div className="mb-4 flex items-center justify-center">
@@ -188,36 +188,38 @@ export default function FamilySettingsPage() {
         )}
 
         {/* Family Info */}
-        <section className="mb-8 rounded-lg bg-white p-6 shadow">
+        <section className="mb-8 rounded-xl bg-white border border-gray-200 p-6 shadow-sm">
           <h2 className="mb-4 text-xl font-semibold text-gray-800">Family Information</h2>
-          <div className="space-y-2">
-            <p className="text-gray-600">
-              <span className="font-medium">Family Name:</span> {family.name}
+          <div className="space-y-3 rounded-lg bg-blue-50/50 p-4">
+            <p className="text-gray-700">
+              <span className="font-semibold text-gray-900">Family Name:</span> {family.name}
             </p>
-            <p className="text-gray-600">
-              <span className="font-medium">Created:</span>{' '}
+            <p className="text-gray-700">
+              <span className="font-semibold text-gray-900">Created:</span>{' '}
               {new Date(family.created_at).toLocaleDateString()}
             </p>
           </div>
         </section>
 
         {/* Family Members */}
-        <section className="mb-8 rounded-lg bg-white p-6 shadow">
+        <section className="mb-8 rounded-xl bg-white border border-gray-200 p-6 shadow-sm">
           <div className="mb-4 flex items-center gap-2">
-            <Users className="h-5 w-5 text-red-900" />
+            <Users className="h-5 w-5 text-teal-600" />
             <h2 className="text-xl font-semibold text-gray-800">Family Members</h2>
           </div>
           {members.length === 0 ? (
-            <p className="text-gray-600">No members yet.</p>
+            <div className="rounded-lg border border-dashed border-gray-200 bg-gray-50 p-8 text-center">
+              <p className="text-gray-600">No members yet.</p>
+            </div>
           ) : (
             <div className="space-y-2">
               {members.map((member) => (
-                <div key={member.id} className="flex items-center justify-between rounded border p-3">
+                <div key={member.id} className="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50/50 p-3 transition-all hover:bg-gray-50">
                   <div>
-                    <p className="font-medium text-gray-900">{member.name}</p>
+                    <p className="font-semibold text-gray-900">{member.name}</p>
                     <p className="text-sm text-gray-600">{member.email}</p>
                   </div>
-                  <span className="rounded-full bg-gray-100 px-3 py-1 text-sm text-gray-700">
+                  <span className="rounded-full bg-teal-100 px-4 py-1.5 text-sm font-medium text-teal-700">
                     {member.role}
                   </span>
                 </div>
@@ -227,9 +229,9 @@ export default function FamilySettingsPage() {
         </section>
 
         {/* Send Invitation */}
-        <section className="mb-8 rounded-lg bg-white p-6 shadow">
+        <section className="mb-8 rounded-xl bg-white border border-gray-200 p-6 shadow-sm">
           <div className="mb-4 flex items-center gap-2">
-            <Mail className="h-5 w-5 text-red-900" />
+            <Mail className="h-5 w-5 text-rose-600" />
             <h2 className="text-xl font-semibold text-gray-800">Invite Family Members</h2>
           </div>
           

@@ -109,23 +109,23 @@ export default function UploadPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gradient-to-br from-stone-100 via-slate-50 to-stone-100">
       <Navbar />
       
       <main className="mx-auto max-w-2xl px-4 py-8">
-        <h1 className="mb-8 text-3xl font-bold text-gray-900">Upload Document</h1>
+        <h1 className="mb-8 text-3xl font-bold text-gray-800">Upload Document</h1>
         
-        <form onSubmit={handleSubmit} className="space-y-6 rounded-lg bg-white p-8 shadow">
+        <form onSubmit={handleSubmit} className="space-y-6 rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
           {/* File Upload */}
           <div>
             <label className="mb-2 block text-sm font-medium text-gray-700">
               Select File
             </label>
-            <div className="flex items-center justify-center rounded-lg border-2 border-dashed border-gray-300 p-8">
+            <div className="flex items-center justify-center rounded-lg border-2 border-dashed border-purple-200 bg-purple-50/30 p-8">
               <div className="text-center">
-                <UploadIcon className="mx-auto h-12 w-12 text-gray-400" />
+                <UploadIcon className="mx-auto h-12 w-12 text-purple-400" />
                 <div className="mt-4">
-                  <label className="cursor-pointer rounded-md bg-red-900 px-4 py-2 text-white hover:bg-red-800">
+                  <label className="cursor-pointer rounded-lg bg-purple-600 px-4 py-2 text-white hover:bg-purple-700 transition-colors shadow-sm">
                     Choose File
                     <input
                       type="file"
@@ -260,7 +260,7 @@ export default function UploadPage() {
           <button
             type="submit"
             disabled={uploading || !file}
-            className="w-full rounded-lg bg-red-900 px-6 py-3 text-white transition-colors hover:bg-red-800 disabled:bg-gray-400"
+            className="w-full rounded-lg bg-purple-600 px-6 py-3 text-white transition-colors hover:bg-purple-700 disabled:bg-gray-400 shadow-sm"
           >
             {uploading ? (
               <span className="flex items-center justify-center gap-2">

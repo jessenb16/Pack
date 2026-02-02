@@ -1,6 +1,6 @@
 'use client';
 
-import { X, ZoomIn, Download, ExternalLink } from 'lucide-react';
+import { X, ZoomIn, Download, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 interface DocumentViewerProps {
@@ -17,10 +17,26 @@ interface DocumentViewerProps {
     };
     file_type: string;
   } | null;
+  uploaderId?: string;
+  currentUserId?: string;
+  onDelete?: (documentId: string) => void;
 }
 
-export default function DocumentViewer({ isOpen, onClose, document: doc }: DocumentViewerProps) {
+export default function DocumentViewer({ 
+  isOpen, 
+  onClose, 
+  document: doc, 
+  uploaderId, 
+  currentUserId,
+  onDelete 
+}: DocumentViewerProps) {
   const [scale, setScale] = useState(1);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  
+  // Compare as strings and ensure both are truthy (not empty strings)
+  // Only allow delete if uploaderId exists and matches currentUserId
+  const canDelete = Boolean(uploaderId && currentUserId && String(uploaderId).trim() !== '' && String(uploaderId) === String(currentUserId));
 
   useEffect(() => {
     if (isOpen) {
@@ -28,11 +44,30 @@ export default function DocumentViewer({ isOpen, onClose, document: doc }: Docum
     } else {
       document.body.style.overflow = 'unset';
       setScale(1); // Reset zoom on close
+      setShowDeleteConfirm(false); // Reset delete confirmation on close
     }
     return () => {
       document.body.style.overflow = 'unset';
     };
   }, [isOpen]);
+
+  const handleDelete = async () => {
+    if (!doc || !onDelete) return;
+    
+    if (!showDeleteConfirm) {
+      setShowDeleteConfirm(true);
+      return;
+    }
+
+    setIsDeleting(true);
+    try {
+      await onDelete(doc.id);
+    } catch (error) {
+      console.error('Error deleting document:', error);
+      setIsDeleting(false);
+      setShowDeleteConfirm(false);
+    }
+  };
 
   if (!isOpen || !doc) return null;
 
@@ -75,6 +110,21 @@ export default function DocumentViewer({ isOpen, onClose, document: doc }: Docum
               >
                 <ZoomIn className="h-4 w-4" />
                 {scale > 1 ? 'Reset' : 'Zoom'}
+              </button>
+            )}
+            {canDelete && (
+              <button
+                onClick={handleDelete}
+                disabled={isDeleting}
+                className={`flex items-center gap-1 rounded px-4 py-1.5 text-sm font-medium text-white transition-colors ${
+                  showDeleteConfirm
+                    ? 'bg-red-600 hover:bg-red-700'
+                    : 'bg-red-600 hover:bg-red-700'
+                } ${isDeleting ? 'opacity-50 cursor-not-allowed' : ''}`}
+                title={showDeleteConfirm ? 'Confirm deletion' : 'Delete document'}
+              >
+                <Trash2 className="h-4 w-4" />
+                {isDeleting ? 'Deleting...' : showDeleteConfirm ? 'Confirm Delete' : 'Delete'}
               </button>
             )}
             <a 

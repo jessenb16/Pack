@@ -16,25 +16,23 @@ export default function RegisterPage() {
             Please enter your first and last name so family members can identify you
           </p>
         </div>
-        <div className="rounded-lg bg-white p-8 shadow-xl">
-          <SignUp 
-            routing="path"
-            path="/register"
-            signInUrl="/login"
-            fallbackRedirectUrl="/dashboard"
-            forceRedirectUrl="/dashboard"
-            appearance={{
-              elements: {
-                formButtonPrimary: "bg-red-900 hover:bg-red-800",
-                card: "shadow-none",
-              }
-            }}
-            // Ensure first name and last name fields are shown
-            additionalOAuthScopes={{
-              google: "profile email",
-            }}
-          />
-        </div>
+        <SignUp 
+          routing="path"
+          path="/register"
+          signInUrl="/login"
+          fallbackRedirectUrl="/dashboard"
+          forceRedirectUrl="/dashboard"
+          appearance={{
+            elements: {
+              formButtonPrimary: "bg-red-900 hover:bg-red-800",
+              card: "shadow-xl",
+            }
+          }}
+          // Ensure first name and last name fields are shown
+          additionalOAuthScopes={{
+            google: "profile email",
+          }}
+        />
         <p className="mt-4 text-center text-white/80">
           Already have an account?{' '}
           <Link href="/login" className="font-semibold underline">

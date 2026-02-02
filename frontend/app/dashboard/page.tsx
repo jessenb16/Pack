@@ -90,6 +90,28 @@ export default function DashboardPage() {
     }
   }
 
+  async function handleDelete(documentId: string) {
+    try {
+      const token = await getToken();
+      const response = await apiClient.deleteDocument(documentId, token);
+      
+      if (response.error) {
+        alert(`Error deleting document: ${response.error}`);
+        return;
+      }
+
+      // Remove document from local state
+      setRecentDocs(recentDocs.filter(doc => doc.id !== documentId));
+      setOnThisDay(onThisDay.filter(doc => doc.id !== documentId));
+      
+      // Close the modal
+      setSelectedDoc(null);
+    } catch (error) {
+      console.error('Error deleting document:', error);
+      alert('Failed to delete document. Please try again.');
+    }
+  }
+
   if (!isLoaded) {
     return (
       <div className="flex min-h-screen items-center justify-center">
@@ -99,7 +121,7 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gradient-to-br from-stone-100 via-slate-50 to-stone-100">
       <Navbar />
       
       <main className="mx-auto max-w-7xl px-4 py-8">
@@ -108,24 +130,27 @@ export default function DashboardPage() {
           isOpen={!!selectedDoc}
           onClose={() => setSelectedDoc(null)}
           document={selectedDoc}
+          uploaderId={selectedDoc?.uploader_id}
+          currentUserId={user?.id}
+          onDelete={handleDelete}
         />
         
-        <h1 className="mb-8 text-3xl font-bold text-gray-900">Dashboard</h1>
+        <h1 className="mb-8 text-3xl font-bold text-gray-800">Dashboard</h1>
         
         {loading && (
           <div className="mb-4 flex items-center justify-center">
-            <Loader2 className="h-5 w-5 animate-spin text-red-900" />
+            <Loader2 className="h-5 w-5 animate-spin text-purple-600" />
             <span className="ml-2 text-gray-600">Loading...</span>
           </div>
         )}
         
         {/* No Organization Message */}
         {!loading && !family && (
-          <section className="mb-8 rounded-lg border-2 border-yellow-400 bg-gradient-to-r from-yellow-50 to-yellow-100 p-6 shadow-lg">
+          <section className="mb-8 rounded-xl border border-amber-200 bg-gradient-to-r from-amber-50/80 to-orange-50/80 p-6 shadow-md">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
-                <div className="rounded-full bg-yellow-400 p-3">
-                  <Users className="h-6 w-6 text-yellow-900" />
+                <div className="rounded-full bg-amber-100 p-3">
+                  <Users className="h-6 w-6 text-amber-700" />
                 </div>
                 <div>
                   <h2 className="text-2xl font-bold text-gray-900">Create Your Family Organization</h2>
@@ -136,7 +161,7 @@ export default function DashboardPage() {
               </div>
               <Link
                 href="/family-setup"
-                className="flex items-center gap-2 rounded-lg bg-red-900 px-6 py-3 text-white transition-colors hover:bg-red-800"
+                className="flex items-center gap-2 rounded-lg bg-red-900 px-6 py-3 text-white transition-all hover:bg-red-800 shadow-sm"
               >
                 <span>Create Family</span>
                 <ArrowRight className="h-5 w-5" />
@@ -147,11 +172,11 @@ export default function DashboardPage() {
 
         {/* Invite Family Members - Prominent Section */}
         {!loading && family && (
-          <section className="mb-8 rounded-lg border-2 border-red-900 bg-gradient-to-r from-red-50 to-yellow-50 p-6 shadow-lg">
+          <section className="mb-8 rounded-xl border border-blue-200 bg-gradient-to-r from-blue-50/80 to-indigo-50/80 p-6 shadow-md">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
-                <div className="rounded-full bg-red-900 p-3">
-                  <Mail className="h-6 w-6 text-white" />
+                <div className="rounded-full bg-blue-100 p-3">
+                  <Mail className="h-6 w-6 text-blue-700" />
                 </div>
                 <div>
                   <h2 className="text-2xl font-bold text-gray-900">Invite Family Members</h2>
@@ -165,7 +190,7 @@ export default function DashboardPage() {
               </div>
               <Link
                 href="/family-settings"
-                className="flex items-center gap-2 rounded-lg bg-red-900 px-6 py-3 text-white transition-colors hover:bg-red-800"
+                className="flex items-center gap-2 rounded-lg bg-red-900 px-6 py-3 text-white transition-all hover:bg-red-800 shadow-sm"
               >
                 <span>Invite Now</span>
                 <ArrowRight className="h-5 w-5" />
@@ -175,32 +200,37 @@ export default function DashboardPage() {
         )}
         
         {/* Recent Uploads */}
-        <section className="mb-12">
-          <h2 className="mb-4 text-2xl font-semibold text-gray-800">Recent Uploads</h2>
+        <section className="mb-12 rounded-xl bg-gradient-to-br from-amber-50/60 to-orange-50/60 p-6 shadow-md border border-amber-100">
+          <div className="mb-4 flex items-center gap-2">
+            <h2 className="text-2xl font-semibold text-gray-800">Recent Uploads</h2>
+            <ImageIcon className="h-6 w-6 text-amber-600" />
+          </div>
           {loading ? (
-            <div className="flex h-48 items-center justify-center rounded-lg border border-dashed border-gray-300 bg-gray-50">
-              <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+            <div className="flex h-48 items-center justify-center rounded-lg border border-dashed border-amber-200 bg-white/50">
+              <Loader2 className="h-8 w-8 animate-spin text-amber-500" />
             </div>
           ) : recentDocs.length === 0 ? (
-            <p className="text-gray-600">No documents yet. Upload your first memory!</p>
+            <div className="rounded-lg border border-dashed border-amber-200 bg-white/50 p-12 text-center">
+              <p className="text-gray-600">No documents yet. Upload your first memory!</p>
+            </div>
           ) : (
             <div className="grid grid-cols-2 gap-4 md:grid-cols-4 lg:grid-cols-6">
               {recentDocs.map((doc) => (
                 <div
                   key={doc.id}
-                  className="group cursor-pointer overflow-hidden rounded-lg bg-white shadow transition-shadow hover:shadow-lg"
+                  className="group cursor-pointer overflow-hidden rounded-lg bg-white shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 border border-gray-100"
                   onClick={() => setSelectedDoc(doc)}
                 >
                   <img
                     src={doc.s3_thumbnail_url}
                     alt={doc.metadata?.sender_name || 'Document'}
-                    className="h-48 w-full object-cover"
+                    className="h-48 w-full object-cover transition-transform group-hover:scale-105"
                   />
                   <div className="p-3">
                     <p className="text-sm font-medium text-gray-900">
                       {doc.metadata?.sender_name}
                     </p>
-                    <p className="text-xs text-gray-500">{doc.metadata?.event_type}</p>
+                    <p className="text-xs text-gray-600">{doc.metadata?.event_type}</p>
                   </div>
                 </div>
               ))}
@@ -210,28 +240,30 @@ export default function DashboardPage() {
 
         {/* On This Day */}
         {!loading && onThisDay.length > 0 && (
-          <section>
-            <div className="mb-4 flex items-center gap-2">
-              <Calendar className="h-6 w-6 text-red-900" />
+          <section className="rounded-xl border border-purple-200 bg-gradient-to-br from-purple-50/60 to-blue-50/60 p-6 shadow-md">
+            <div className="mb-4 flex items-center gap-3">
+              <div className="rounded-full bg-purple-100 p-2.5">
+                <Calendar className="h-5 w-5 text-purple-700" />
+              </div>
               <h2 className="text-2xl font-semibold text-gray-800">On This Day</h2>
             </div>
             <div className="grid grid-cols-2 gap-4 md:grid-cols-4 lg:grid-cols-6">
               {onThisDay.map((doc) => (
                 <div
                   key={doc.id}
-                  className="group cursor-pointer overflow-hidden rounded-lg bg-white shadow transition-shadow hover:shadow-lg"
+                  className="group cursor-pointer overflow-hidden rounded-lg bg-white shadow-sm transition-all hover:shadow-md hover:scale-105 border border-gray-100"
                   onClick={() => setSelectedDoc(doc)}
                 >
                   <img
                     src={doc.s3_thumbnail_url}
                     alt={doc.metadata?.sender_name || 'Document'}
-                    className="h-48 w-full object-cover"
+                    className="h-48 w-full object-cover transition-transform group-hover:scale-105"
                   />
                   <div className="p-3">
                     <p className="text-sm font-medium text-gray-900">
                       {doc.metadata?.sender_name}
                     </p>
-                    <p className="text-xs text-gray-500">{doc.metadata?.event_type}</p>
+                    <p className="text-xs text-gray-600">{doc.metadata?.event_type}</p>
                   </div>
                 </div>
               ))}

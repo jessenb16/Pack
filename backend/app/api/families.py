@@ -10,7 +10,7 @@ import asyncio
 from concurrent.futures import ThreadPoolExecutor
 
 from app.core.database import get_db
-from app.api.auth import get_current_user, get_org_id
+from app.api.auth import get_current_user_light
 from app.core.clerk_auth import get_clerk_organization, get_clerk_secret_key
 from app.core.clerk_org import (
     send_clerk_organization_invitation,
@@ -29,7 +29,7 @@ CLERK_API_URL = "https://api.clerk.com/v1"
 
 @router.get("/me")
 async def get_my_family(
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user_light),
     db: Database = Depends(get_db)
 ):
     """Get current user's organization (family) from Clerk."""
@@ -91,7 +91,7 @@ async def get_my_family(
 
 @router.get("/members")
 async def get_family_members(
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user_light)
 ):
     """Get all members of the current user's organization from Clerk."""
     org_id = current_user.get("org_id")
@@ -127,7 +127,7 @@ class InvitationRequest(BaseModel):
 @router.post("/invitations")
 async def send_invitation(
     invitation: InvitationRequest = Body(...),
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user_light)
 ):
     """
     Send an invitation to join the organization.
@@ -170,7 +170,7 @@ async def send_invitation(
 
 @router.get("/invitations")
 async def get_invitations(
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user_light)
 ):
     """Get pending invitations for the organization."""
     org_id = current_user.get("org_id")
@@ -201,7 +201,7 @@ async def get_invitations(
 @router.post("/invitations/{invitation_id}/revoke")
 async def revoke_invitation(
     invitation_id: str,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user_light)
 ):
     """Revoke a pending invitation."""
     org_id = current_user.get("org_id")

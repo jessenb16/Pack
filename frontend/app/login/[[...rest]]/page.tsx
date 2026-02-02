@@ -13,15 +13,19 @@ export default function LoginPage() {
             Sign in to your family archive
           </p>
         </div>
-        <div className="rounded-lg bg-white p-8 shadow-xl">
-          <SignIn 
-            routing="path"
-            path="/login"
-            signUpUrl="/register"
-            fallbackRedirectUrl="/dashboard"
-            forceRedirectUrl="/dashboard"
-          />
-        </div>
+        <SignIn 
+          routing="path"
+          path="/login"
+          signUpUrl="/register"
+          fallbackRedirectUrl="/dashboard"
+          forceRedirectUrl="/dashboard"
+          appearance={{
+            elements: {
+              formButtonPrimary: "bg-red-900 hover:bg-red-800",
+              card: "shadow-xl",
+            }
+          }}
+        />
         <p className="mt-4 text-center text-white/80">
           Don't have an account?{' '}
           <Link href="/register" className="font-semibold underline">

@@ -105,6 +105,30 @@ export default function VaultPage() {
     router.push(`/vault?${params.toString()}`);
   }
 
+  async function handleDelete(documentId: string) {
+    try {
+      const token = await getToken();
+      const response = await apiClient.deleteDocument(documentId, token);
+      
+      if (response.error) {
+        alert(`Error deleting document: ${response.error}`);
+        return;
+      }
+
+      // Remove document from local state
+      setDocuments(documents.filter(doc => doc.id !== documentId));
+      
+      // Close the modal
+      setSelectedDoc(null);
+      
+      // Optionally reload documents to ensure consistency
+      // loadDocuments();
+    } catch (error) {
+      console.error('Error deleting document:', error);
+      alert('Failed to delete document. Please try again.');
+    }
+  }
+
   if (!isLoaded || loading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
@@ -114,7 +138,7 @@ export default function VaultPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gradient-to-br from-stone-100 via-slate-50 to-stone-100">
       <Navbar />
       
       <main className="mx-auto max-w-7xl px-4 py-8">
@@ -123,12 +147,15 @@ export default function VaultPage() {
           isOpen={!!selectedDoc}
           onClose={() => setSelectedDoc(null)}
           document={selectedDoc}
+          uploaderId={selectedDoc?.uploader_id}
+          currentUserId={user?.id}
+          onDelete={handleDelete}
         />
 
-        <h1 className="mb-8 text-3xl font-bold text-gray-900">The Vault</h1>
+        <h1 className="mb-8 text-3xl font-bold text-gray-800">The Vault</h1>
         
         {/* Smart Chips Filter */}
-        <div className="mb-8">
+        <div className="mb-8 rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
           <div className="mb-4">
             <h2 className="mb-2 text-lg font-semibold text-gray-700">Filter by Sender</h2>
             <div className="flex flex-wrap gap-2">
@@ -136,10 +163,10 @@ export default function VaultPage() {
                 <button
                   key={sender}
                   onClick={() => updateFilter('sender', sender)}
-                  className={`rounded-full px-4 py-2 text-sm transition-colors ${
+                  className={`rounded-full px-4 py-2 text-sm transition-all ${
                     filters.sender === sender
-                      ? 'bg-red-900 text-white'
-                      : 'bg-white text-gray-700 hover:bg-gray-100'
+                      ? 'bg-purple-600 text-white shadow-sm'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                   }`}
                 >
                   {sender}
@@ -155,10 +182,10 @@ export default function VaultPage() {
                 <button
                   key={event}
                   onClick={() => updateFilter('event_type', event)}
-                  className={`rounded-full px-4 py-2 text-sm transition-colors ${
+                  className={`rounded-full px-4 py-2 text-sm transition-all ${
                     filters.event_type === event
-                      ? 'bg-red-900 text-white'
-                      : 'bg-white text-gray-700 hover:bg-gray-100'
+                      ? 'bg-cyan-600 text-white shadow-sm'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                   }`}
                 >
                   {event}
@@ -174,10 +201,10 @@ export default function VaultPage() {
                 <button
                   key={year}
                   onClick={() => updateFilter('year', year.toString())}
-                  className={`rounded-full px-4 py-2 text-sm transition-colors ${
+                  className={`rounded-full px-4 py-2 text-sm transition-all ${
                     filters.year === year.toString()
-                      ? 'bg-red-900 text-white'
-                      : 'bg-white text-gray-700 hover:bg-gray-100'
+                      ? 'bg-indigo-600 text-white shadow-sm'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                   }`}
                 >
                   {year}
@@ -191,7 +218,7 @@ export default function VaultPage() {
             <div className="mt-4 flex items-center gap-2">
               <span className="text-sm text-gray-600">Active filters:</span>
               {filters.sender && (
-                <span className="flex items-center gap-1 rounded-full bg-red-900 px-3 py-1 text-sm text-white">
+                <span className="flex items-center gap-1 rounded-full bg-purple-600 px-3 py-1 text-sm text-white">
                   {filters.sender}
                   <button onClick={() => clearFilter('sender')}>
                     <X className="h-4 w-4" />
@@ -199,7 +226,7 @@ export default function VaultPage() {
                 </span>
               )}
               {filters.event_type && (
-                <span className="flex items-center gap-1 rounded-full bg-red-900 px-3 py-1 text-sm text-white">
+                <span className="flex items-center gap-1 rounded-full bg-cyan-600 px-3 py-1 text-sm text-white">
                   {filters.event_type}
                   <button onClick={() => clearFilter('event_type')}>
                     <X className="h-4 w-4" />
@@ -207,7 +234,7 @@ export default function VaultPage() {
                 </span>
               )}
               {filters.year && (
-                <span className="flex items-center gap-1 rounded-full bg-red-900 px-3 py-1 text-sm text-white">
+                <span className="flex items-center gap-1 rounded-full bg-indigo-600 px-3 py-1 text-sm text-white">
                   {filters.year}
                   <button onClick={() => clearFilter('year')}>
                     <X className="h-4 w-4" />
@@ -219,34 +246,38 @@ export default function VaultPage() {
         </div>
 
         {/* Document Grid */}
-        {documents.length === 0 ? (
-          <p className="text-gray-600">No documents found. Try adjusting your filters.</p>
-        ) : (
-          <div className="grid grid-cols-2 gap-4 md:grid-cols-4 lg:grid-cols-6">
-            {documents.map((doc) => (
-              <div
-                key={doc.id}
-                className="group cursor-pointer overflow-hidden rounded-lg bg-white shadow transition-shadow hover:shadow-lg"
-                onClick={() => setSelectedDoc(doc)}
-              >
-                <img
-                  src={doc.s3_thumbnail_url}
-                  alt={doc.metadata?.sender_name || 'Document'}
-                  className="h-48 w-full object-cover"
-                />
-                <div className="p-3">
-                  <p className="text-sm font-medium text-gray-900">
-                    {doc.metadata?.sender_name}
-                  </p>
-                  <p className="text-xs text-gray-500">{doc.metadata?.event_type}</p>
-                  <p className="text-xs text-gray-400">
-                    {new Date(doc.metadata?.doc_date).toLocaleDateString()}
-                  </p>
+        <div className="rounded-xl bg-gradient-to-br from-amber-50/40 to-orange-50/40 p-6 border border-amber-100">
+          {documents.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-amber-200 bg-white/50 p-16 text-center">
+              <p className="text-lg text-gray-600">No documents found. Try adjusting your filters.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-4 md:grid-cols-4 lg:grid-cols-6">
+              {documents.map((doc) => (
+                <div
+                  key={doc.id}
+                  className="group cursor-pointer overflow-hidden rounded-lg bg-white shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 border border-gray-100"
+                  onClick={() => setSelectedDoc(doc)}
+                >
+                  <img
+                    src={doc.s3_thumbnail_url}
+                    alt={doc.metadata?.sender_name || 'Document'}
+                    className="h-48 w-full object-cover transition-transform group-hover:scale-105"
+                  />
+                  <div className="p-3">
+                    <p className="text-sm font-medium text-gray-900">
+                      {doc.metadata?.sender_name}
+                    </p>
+                    <p className="text-xs text-gray-600">{doc.metadata?.event_type}</p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      {new Date(doc.metadata?.doc_date).toLocaleDateString()}
+                    </p>
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
-        )}
+              ))}
+            </div>
+          )}
+        </div>
       </main>
     </div>
   );

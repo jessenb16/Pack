@@ -27,9 +27,9 @@ class ApiClient {
     token?: string | null
   ): Promise<ApiResponse<T>> {
     const url = `${this.baseUrl}${endpoint}`;
-    const headers: HeadersInit = {
+    const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      ...options.headers,
+      ...(options.headers as Record<string, string> || {}),
     };
 
     // Add Clerk token if available
@@ -125,11 +125,53 @@ class ApiClient {
     return { data };
   }
 
+  async deleteDocument(documentId: string, token?: string | null) {
+    const url = `${this.baseUrl}/api/documents/${documentId}`;
+    const headers: Record<string, string> = {};
+    
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    try {
+      const response = await fetch(url, {
+        method: 'DELETE',
+        headers,
+        credentials: 'include',
+      });
+
+      // DELETE endpoint returns 204 No Content on success
+      if (response.status === 204) {
+        return { data: { success: true } };
+      }
+
+      // If there's an error, try to parse the response
+      const data = await response.json().catch(() => ({}));
+      return {
+        error: data.detail || data.error || 'Failed to delete document',
+      };
+    } catch (error) {
+      return {
+        error: error instanceof Error ? error.message : 'Network error',
+      };
+    }
+  }
+
   // Chat endpoints
-  async askPack(query: string, conversation_history?: any[], token?: string | null) {
-    return this.request<{ answer: string; documents?: any[] }>('/api/chat/ask', {
+  async askPack(query: string, sessionId?: string | null, token?: string | null) {
+    // Note: conversation_history is no longer needed - handled by thread_id on backend
+    // sessionId: Optional - if provided, creates session-based thread (new conversation per session)
+    //            if not provided, creates persistent thread (all conversations share history)
+    return this.request<{ 
+      type: string;  // "filter" or "detective"
+      content: {
+        answer: string;
+        documents?: any[];
+      };
+      count: number;
+    }>('/api/chat/ask', {
       method: 'POST',
-      body: JSON.stringify({ query, conversation_history }),
+      body: JSON.stringify({ query, session_id: sessionId || null }),
     }, token);
   }
 

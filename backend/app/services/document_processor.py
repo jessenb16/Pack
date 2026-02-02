@@ -154,12 +154,10 @@ def process_document(file_data: bytes, filename: str) -> dict:
             # Convert image to base64 for API
             import base64
             img_base64 = base64.b64encode(file_data).decode('utf-8')
-            # text_content = extract_text_from_image(img_base64, filename)
-            text_content = ""
+            text_content = extract_text_from_image(img_base64, filename)
         
         # Generate embedding
-        # embedding = create_embedding(text_content or "")
-        embedding = []
+        embedding = create_embedding(text_content or "")
         
         return {
             'thumbnail_data': thumbnail_data,

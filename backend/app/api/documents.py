@@ -6,7 +6,7 @@ from typing import Optional, List
 from werkzeug.utils import secure_filename
 
 from app.core.database import get_db, get_org_filter
-from app.api.auth import get_current_user, get_org_id
+from app.api.auth import get_current_user_light, get_org_id_light
 from app.models.document import DocumentResponse, DocumentFilter, DocumentCreate
 from app.services.storage import upload_to_s3, delete_from_s3, get_signed_url, extract_s3_key_from_url
 from app.services.document_processor import process_document
@@ -29,8 +29,8 @@ async def get_documents(
     sender: Optional[str] = None,
     event_type: Optional[str] = None,
     year: Optional[int] = None,
-    current_user: dict = Depends(get_current_user),
-    org_id: str = Depends(get_org_id),
+    current_user: dict = Depends(get_current_user_light),
+    org_id: str = Depends(get_org_id_light),
     db: Database = Depends(get_db)
 ):
     """Get documents with optional filtering."""
@@ -52,6 +52,7 @@ async def get_documents(
         "_id": 1,
         "org_id": 1,
         "family_id": 1,
+        "uploader_id": 1,
         "metadata": 1,
         "s3_original_url": 1,
         "s3_thumbnail_url": 1,
@@ -101,8 +102,8 @@ async def get_documents(
 @router.get("/{document_id}", response_model=DocumentResponse)
 async def get_document(
     document_id: str,
-    current_user: dict = Depends(get_current_user),
-    org_id: str = Depends(get_org_id),
+    current_user: dict = Depends(get_current_user_light),
+    org_id: str = Depends(get_org_id_light),
     db: Database = Depends(get_db)
 ):
     """Get a specific document."""
@@ -159,8 +160,8 @@ async def upload_document(
     event_type: str = Form(...),
     doc_date: str = Form(...),
     recipient_name: Optional[str] = Form(None),
-    current_user: dict = Depends(get_current_user),
-    org_id: str = Depends(get_org_id),
+    current_user: dict = Depends(get_current_user_light),
+    org_id: str = Depends(get_org_id_light),
     db: Database = Depends(get_db)
 ):
     """Upload a new document."""
@@ -259,8 +260,8 @@ async def upload_document(
 @router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_document(
     document_id: str,
-    current_user: dict = Depends(get_current_user),
-    org_id: str = Depends(get_org_id),
+    current_user: dict = Depends(get_current_user_light),
+    org_id: str = Depends(get_org_id_light),
     db: Database = Depends(get_db)
 ):
     """Delete a document."""
@@ -277,6 +278,16 @@ async def delete_document(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Document not found"
+        )
+    
+    # Verify that the current user is the uploader
+    doc_uploader_id = doc.get("uploader_id")
+    current_user_id = current_user.get("clerk_user_id")
+    
+    if not doc_uploader_id or doc_uploader_id != current_user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the document uploader can delete this document"
         )
     
     # Delete from S3 using stored keys

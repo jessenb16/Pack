@@ -108,12 +108,91 @@ def get_current_user(
     }
 
 
+def get_current_user_light(
+    authorization: Optional[str] = Header(None)
+) -> dict:
+    """
+    Light auth: verify token and extract user/org from JWT only.
+    Skips get_clerk_user() to avoid an extra Clerk API call per request.
+    Use for document/family/chat routes that don't need email/name.
+    Returns same shape as get_current_user but email=None, name=None.
+    """
+    if not authorization:
+        logger.warning("Authorization header missing")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authorization header missing",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    try:
+        scheme, token = authorization.split()
+        if scheme.lower() != "bearer":
+            raise ValueError("Invalid authorization scheme")
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authorization header format",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    clerk_claims = verify_clerk_token(token)
+    if not clerk_claims:
+        logger.error(f"Token verification failed. Token preview: {token[:30]}...")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token. Please check your Clerk configuration.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    clerk_user_id = clerk_claims.get("sub")
+    if not clerk_user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User ID not found in token",
+        )
+    clerk_org_id = (
+        clerk_claims.get("org_id") or
+        clerk_claims.get("organization_id") or
+        (clerk_claims.get("org") and isinstance(clerk_claims["org"], dict) and clerk_claims["org"].get("id")) or
+        None
+    )
+    if not clerk_org_id:
+        memberships = get_user_organizations(clerk_user_id)
+        if memberships:
+            first_membership = memberships[0]
+            clerk_org_id = (
+                first_membership.get("organization", {}).get("id") or
+                first_membership.get("organization_id") or
+                first_membership.get("org_id") or
+                (isinstance(first_membership.get("organization"), str) and first_membership.get("organization")) or
+                None
+            )
+    return {
+        "clerk_user_id": clerk_user_id,
+        "org_id": clerk_org_id,
+        "email": None,
+        "name": None,
+    }
+
+
 def get_org_id(current_user: dict = Depends(get_current_user)) -> str:
     """
     Extract org_id from current user.
     Raises error if user is not part of an organization.
     
     Use this as a dependency in routes that require organization context.
+    """
+    org_id = current_user.get("org_id")
+    if not org_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User is not part of an organization"
+        )
+    return org_id
+
+
+def get_org_id_light(current_user: dict = Depends(get_current_user_light)) -> str:
+    """
+    Extract org_id from current user (light auth).
+    Use with get_current_user_light for document/family/chat routes.
     """
     org_id = current_user.get("org_id")
     if not org_id:

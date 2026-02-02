@@ -14,13 +14,16 @@ app = FastAPI(
 )
 
 # CORS configuration for Next.js frontend
+# Add your machine's local IP if accessing via network (e.g. http://192.168.1.91:3000)
+_origins = [
+    "http://localhost:3000",  # Next.js dev server
+    "http://192.168.0.151:3000",
+    "http://192.168.1.91:3000",  # Local network
+    os.getenv("FRONTEND_URL", "http://localhost:3000"),
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",  # Next.js dev server
-        "http://192.168.0.151:3000",  # Local network
-        os.getenv("FRONTEND_URL", "http://localhost:3000")
-    ],
+    allow_origins=[o for o in _origins if o],  # Filter out empty strings
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
