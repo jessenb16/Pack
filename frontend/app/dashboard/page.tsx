@@ -1,0 +1,277 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { useUser, useAuth, useOrganization } from '@clerk/nextjs';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import Navbar from '@/components/Navbar';
+import DocumentViewer from '@/components/DocumentViewer';
+import { apiClient } from '@/lib/api';
+import { Calendar, Image as ImageIcon, Loader2, Mail, Users, ArrowRight } from 'lucide-react';
+
+export default function DashboardPage() {
+  const { user, isLoaded } = useUser();
+  const { getToken } = useAuth();
+  const { organization } = useOrganization();
+  const router = useRouter();
+  const [recentDocs, setRecentDocs] = useState<any[]>([]);
+  const [onThisDay, setOnThisDay] = useState<any[]>([]);
+  const [family, setFamily] = useState<any>(null);
+  const [members, setMembers] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedDoc, setSelectedDoc] = useState<any>(null);
+
+  useEffect(() => {
+    if (!isLoaded) return;
+    
+    if (!user) {
+      router.push('/login');
+      return;
+    }
+
+    loadDashboard();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, isLoaded]);
+
+  async function loadDashboard() {
+    try {
+      // Get token - backend will fetch org from Clerk API if not in token
+      const token = await getToken();
+      
+      if (!token) {
+        console.error('Failed to get token from Clerk');
+        setLoading(false);
+        return;
+      }
+      
+      // Make all API calls in parallel for better performance
+      const [familyResponse, documentsResponse] = await Promise.all([
+        apiClient.getFamily(token),
+        apiClient.getDocuments(undefined, token)
+      ]);
+      
+      // Handle family response (includes members already)
+      if (familyResponse.data) {
+        setFamily(familyResponse.data);
+        // Members are already included in familyResponse.data.members
+        setMembers(familyResponse.data.members || []);
+      } else if (familyResponse.error) {
+        // If error is about no organization, that's okay - user just needs to create one
+        if (familyResponse.error.includes('not part of an organization') || 
+            familyResponse.error.includes('404') ||
+            familyResponse.error.includes('403')) {
+          setFamily(null);
+          setMembers([]);
+        } else {
+          console.error('Error loading family:', familyResponse.error);
+        }
+      }
+      
+      // Handle documents response
+      if (documentsResponse.data) {
+        setRecentDocs(documentsResponse.data.slice(0, 20));
+        
+        // Get "On This Day" documents
+        const today = new Date();
+        const todayStr = `${today.getMonth() + 1}-${today.getDate()}`;
+        const onThisDayDocs = documentsResponse.data.filter((doc: any) => {
+          const docDate = doc.metadata?.doc_date;
+          if (!docDate) return false;
+          const date = new Date(docDate);
+          const dateStr = `${date.getMonth() + 1}-${date.getDate()}`;
+          return dateStr === todayStr;
+        });
+        setOnThisDay(onThisDayDocs);
+      }
+    } catch (error) {
+      console.error('Error loading dashboard:', error);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleDelete(documentId: string) {
+    try {
+      const token = await getToken();
+      const response = await apiClient.deleteDocument(documentId, token);
+      
+      if (response.error) {
+        alert(`Error deleting document: ${response.error}`);
+        return;
+      }
+
+      // Remove document from local state
+      setRecentDocs(recentDocs.filter(doc => doc.id !== documentId));
+      setOnThisDay(onThisDay.filter(doc => doc.id !== documentId));
+      
+      // Close the modal
+      setSelectedDoc(null);
+    } catch (error) {
+      console.error('Error deleting document:', error);
+      alert('Failed to delete document. Please try again.');
+    }
+  }
+
+  if (!isLoaded) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-red-900" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-stone-100 via-slate-50 to-stone-100">
+      <Navbar />
+      
+      <main className="mx-auto max-w-7xl px-4 py-8">
+        {/* Document Viewer Modal */}
+        <DocumentViewer
+          isOpen={!!selectedDoc}
+          onClose={() => setSelectedDoc(null)}
+          document={selectedDoc}
+          uploaderId={selectedDoc?.uploader_id}
+          currentUserId={user?.id}
+          onDelete={handleDelete}
+        />
+        
+        <h1 className="mb-8 text-3xl font-bold text-gray-800">Dashboard</h1>
+        
+        {loading && (
+          <div className="mb-4 flex items-center justify-center">
+            <Loader2 className="h-5 w-5 animate-spin text-purple-600" />
+            <span className="ml-2 text-gray-600">Loading...</span>
+          </div>
+        )}
+        
+        {/* No Organization Message */}
+        {!loading && !family && (
+          <section className="mb-8 rounded-xl border border-amber-200 bg-gradient-to-r from-amber-50/80 to-orange-50/80 p-6 shadow-md">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="rounded-full bg-amber-100 p-3">
+                  <Users className="h-6 w-6 text-amber-700" />
+                </div>
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-900">Create Your Family Organization</h2>
+                  <p className="text-gray-600">
+                    Create a family organization to start organizing your memories and inviting family members.
+                  </p>
+                </div>
+              </div>
+              <Link
+                href="/family-setup"
+                className="flex items-center gap-2 rounded-lg bg-red-900 px-6 py-3 text-white transition-all hover:bg-red-800 shadow-sm"
+              >
+                <span>Create Family</span>
+                <ArrowRight className="h-5 w-5" />
+              </Link>
+            </div>
+          </section>
+        )}
+
+        {/* Invite Family Members - Prominent Section */}
+        {!loading && family && (
+          <section className="mb-8 rounded-xl border border-blue-200 bg-gradient-to-r from-blue-50/80 to-indigo-50/80 p-6 shadow-md">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="rounded-full bg-blue-100 p-3">
+                  <Mail className="h-6 w-6 text-blue-700" />
+                </div>
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-900">Invite Family Members</h2>
+                  <p className="text-gray-600">
+                    {members.length === 1 
+                      ? "You're the only member. Invite others to start sharing memories!"
+                      : `${members.length} family member${members.length > 1 ? 's' : ''} in ${family.name}`
+                    }
+                  </p>
+                </div>
+              </div>
+              <Link
+                href="/family-settings"
+                className="flex items-center gap-2 rounded-lg bg-red-900 px-6 py-3 text-white transition-all hover:bg-red-800 shadow-sm"
+              >
+                <span>Invite Now</span>
+                <ArrowRight className="h-5 w-5" />
+              </Link>
+            </div>
+          </section>
+        )}
+        
+        {/* Recent Uploads */}
+        <section className="mb-12 rounded-xl bg-gradient-to-br from-amber-50/60 to-orange-50/60 p-6 shadow-md border border-amber-100">
+          <div className="mb-4 flex items-center gap-2">
+            <h2 className="text-2xl font-semibold text-gray-800">Recent Uploads</h2>
+            <ImageIcon className="h-6 w-6 text-amber-600" />
+          </div>
+          {loading ? (
+            <div className="flex h-48 items-center justify-center rounded-lg border border-dashed border-amber-200 bg-white/50">
+              <Loader2 className="h-8 w-8 animate-spin text-amber-500" />
+            </div>
+          ) : recentDocs.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-amber-200 bg-white/50 p-12 text-center">
+              <p className="text-gray-600">No documents yet. Upload your first memory!</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-4 md:grid-cols-4 lg:grid-cols-6">
+              {recentDocs.map((doc) => (
+                <div
+                  key={doc.id}
+                  className="group cursor-pointer overflow-hidden rounded-lg bg-white shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 border border-gray-100"
+                  onClick={() => setSelectedDoc(doc)}
+                >
+                  <img
+                    src={doc.s3_thumbnail_url}
+                    alt={doc.metadata?.sender_name || 'Document'}
+                    className="h-48 w-full object-cover transition-transform group-hover:scale-105"
+                  />
+                  <div className="p-3">
+                    <p className="text-sm font-medium text-gray-900">
+                      {doc.metadata?.sender_name}
+                    </p>
+                    <p className="text-xs text-gray-600">{doc.metadata?.event_type}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        {/* On This Day */}
+        {!loading && onThisDay.length > 0 && (
+          <section className="rounded-xl border border-purple-200 bg-gradient-to-br from-purple-50/60 to-blue-50/60 p-6 shadow-md">
+            <div className="mb-4 flex items-center gap-3">
+              <div className="rounded-full bg-purple-100 p-2.5">
+                <Calendar className="h-5 w-5 text-purple-700" />
+              </div>
+              <h2 className="text-2xl font-semibold text-gray-800">On This Day</h2>
+            </div>
+            <div className="grid grid-cols-2 gap-4 md:grid-cols-4 lg:grid-cols-6">
+              {onThisDay.map((doc) => (
+                <div
+                  key={doc.id}
+                  className="group cursor-pointer overflow-hidden rounded-lg bg-white shadow-sm transition-all hover:shadow-md hover:scale-105 border border-gray-100"
+                  onClick={() => setSelectedDoc(doc)}
+                >
+                  <img
+                    src={doc.s3_thumbnail_url}
+                    alt={doc.metadata?.sender_name || 'Document'}
+                    className="h-48 w-full object-cover transition-transform group-hover:scale-105"
+                  />
+                  <div className="p-3">
+                    <p className="text-sm font-medium text-gray-900">
+                      {doc.metadata?.sender_name}
+                    </p>
+                    <p className="text-xs text-gray-600">{doc.metadata?.event_type}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+      </main>
+    </div>
+  );
+}
+

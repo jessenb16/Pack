@@ -1,3 +1,4 @@
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
@@ -6,9 +7,39 @@ __pycache__/
 env/
 venv/
 ENV/
-uploads/
-.DS_Store
 *.log
-.idea/
+
+# Node
+node_modules/
+.next/
+out/
+dist/
+*.log
+
+# Environment variables
+.env
+.env.local
+.env*.local
+
+# AWS
+.aws/
+
+# MongoDB
+*.mongo
+
+# IDE
 .vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build outputs
+*.egg-info/
+build/
+dist/
 
