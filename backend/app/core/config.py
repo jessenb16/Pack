@@ -14,6 +14,8 @@ class Settings(BaseSettings):
     # MongoDB
     MONGODB_URI: str = os.getenv("MONGODB_URI", "mongodb://localhost:27017/")
     DATABASE_NAME: str = os.getenv("DATABASE_NAME", "pack")
+    # Chat checkpoints: TTL in days (0 = keep forever). MongoDB auto-deletes expired docs.
+    CHECKPOINT_TTL_DAYS: int = int(os.getenv("CHECKPOINT_TTL_DAYS", "30"))
     
     # AWS S3
     AWS_ACCESS_KEY_ID: str = os.getenv("AWS_ACCESS_KEY_ID", "")

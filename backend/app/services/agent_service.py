@@ -8,13 +8,11 @@ from langchain_core.tools import tool
 from langchain_core.runnables import RunnableConfig
 from langchain_core.messages import HumanMessage, AIMessage, ToolMessage, SystemMessage
 from langgraph.prebuilt import create_react_agent
-from langgraph.checkpoint.memory import MemorySaver
-# TODO: Switch to MongoDBSaver once agent is working
-# from langgraph.checkpoint.mongodb import AsyncMongoDBSaver
+from langgraph.checkpoint.mongodb import MongoDBSaver
 
 # App Imports
 from app.core.config import settings
-from app.core.database import get_database, get_async_client
+from app.core.database import get_database
 from app.services.document_processor import create_embedding
 from app.services.storage import get_signed_url, extract_s3_key_from_url
 
@@ -247,10 +245,17 @@ async def search_memory_contents(
 
 tools = [fetch_documents, search_memory_contents]
 
-# Use MemorySaver for now (MVP) - switch to AsyncMongoDBSaver later
-# Note: MongoDBSaver expects sync pymongo client, not Motor async client
-# For async, we'd need AsyncMongoDBSaver, but let's get it working first
-checkpointer = MemorySaver()
+# Production: checkpoints stored in MongoDB (same DB as app; collections created by library)
+# MongoDBSaver supports async via .aget/.aput/.alist; use connection string for compatibility.
+# TTL (days) auto-expires old checkpoints so storage doesn't grow indefinitely (0 = no TTL).
+_checkpointer_cm = MongoDBSaver.from_conn_string(
+    settings.MONGODB_URI,
+    settings.DATABASE_NAME,
+    checkpoint_collection_name="checkpoints",
+    writes_collection_name="checkpoint_writes",
+    ttl=settings.CHECKPOINT_TTL_DAYS * 86400 if settings.CHECKPOINT_TTL_DAYS else None,
+)
+checkpointer = _checkpointer_cm.__enter__()
 
 # Create the Graph (Prebuilt ReAct Agent)
 # This handles the loop: LLM -> Tool -> LLM automatically
