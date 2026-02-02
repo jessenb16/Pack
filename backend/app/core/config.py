@@ -33,6 +33,8 @@ class Settings(BaseSettings):
     CLERK_SECRET_KEY: str = os.getenv("CLERK_SECRET_KEY", "")
     CLERK_PUBLISHABLE_KEY: str = os.getenv("NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY", "")
     CLERK_FRONTEND_API: Optional[str] = os.getenv("NEXT_PUBLIC_CLERK_FRONTEND_API", "")
+    # Clerk webhooks: signing secret from Clerk Dashboard → Webhooks → Signing Secret (whsec_...)
+    CLERK_WEBHOOK_SECRET: str = os.getenv("CLERK_WEBHOOK_SECRET", "")
     
     # File Upload
     MAX_CONTENT_LENGTH: int = int(os.getenv("MAX_CONTENT_LENGTH", 16 * 1024 * 1024))  # 16MB

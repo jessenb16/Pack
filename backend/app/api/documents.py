@@ -144,7 +144,8 @@ async def get_document(
         metadata={
             "sender_name": doc["metadata"]["sender_name"],
             "event_type": doc["metadata"]["event_type"],
-            "doc_date": doc["metadata"]["doc_date"]
+            "doc_date": doc["metadata"]["doc_date"],
+            "recipient_name": doc["metadata"].get("recipient_name")
         },
         file_type=assets.get("file_type") or doc.get("file_type", ""),
         s3_original_url=original_signed_url,
