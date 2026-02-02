@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useUser, useAuth } from '@clerk/nextjs';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Navbar from '@/components/Navbar';
@@ -8,7 +8,7 @@ import DocumentViewer from '@/components/DocumentViewer';
 import { apiClient } from '@/lib/api';
 import { X, Loader2 } from 'lucide-react';
 
-export default function VaultPage() {
+function VaultContent() {
   const { user, isLoaded } = useUser();
   const { getToken } = useAuth();
   const router = useRouter();
@@ -280,6 +280,20 @@ export default function VaultPage() {
         </div>
       </main>
     </div>
+  );
+}
+
+export default function VaultPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-red-900" />
+        </div>
+      }
+    >
+      <VaultContent />
+    </Suspense>
   );
 }
 

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useUser, useAuth } from '@clerk/nextjs';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import Navbar from '@/components/Navbar';
 import { apiClient } from '@/lib/api';
 import { Loader2, CheckCircle, XCircle } from 'lucide-react';
@@ -11,7 +11,6 @@ export default function AcceptInvitationPage() {
   const { user, isLoaded } = useUser();
   const { getToken } = useAuth();
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
   const [message, setMessage] = useState('');
 

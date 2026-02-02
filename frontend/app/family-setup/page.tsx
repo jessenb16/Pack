@@ -11,10 +11,14 @@ import { Loader2 } from 'lucide-react';
 export default function FamilySetupPage() {
   const { user, isLoaded } = useUser();
   const { getToken } = useAuth();
-  const { organizationList, isLoaded: orgListLoaded } = useOrganizationList();
+  const { userMemberships, isLoaded: orgListLoaded } = useOrganizationList({
+    userMemberships: true,
+  });
   const router = useRouter();
   const [checking, setChecking] = useState(true);
   const [syncing, setSyncing] = useState(false);
+
+  const memberships = userMemberships?.data ?? [];
 
   useEffect(() => {
     if (!isLoaded || !orgListLoaded) return;
@@ -24,18 +28,21 @@ export default function FamilySetupPage() {
       return;
     }
 
+    // Wait for memberships to finish loading
+    if (userMemberships?.isLoading) return;
+
     // If user already has an organization, redirect to dashboard
-    if (organizationList && organizationList.length > 0) {
+    if (memberships.length > 0) {
       router.push('/dashboard');
       return;
     }
 
     // User doesn't have an organization, show the create form
     setChecking(false);
-  }, [user, isLoaded, orgListLoaded, organizationList, router]);
+  }, [user, isLoaded, orgListLoaded, userMemberships?.isLoading, memberships.length, router]);
 
 
-  if (!isLoaded || !orgListLoaded || checking) {
+  if (!isLoaded || !orgListLoaded || userMemberships?.isLoading || checking) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <div className="text-lg">Loading...</div>
