@@ -218,14 +218,14 @@ export default function FamilySettingsPage() {
           ) : (
             <div className="space-y-2">
               {members.map((member, idx) => (
-                <div key={typeof member.id === 'string' || typeof member.id === 'number' ? String(member.id) : `member-${idx}`} className="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50/50 p-3 transition-all hover:bg-gray-50">
-                  <div>
-                    <p className="font-semibold text-gray-900">{typeof member.name === 'string' ? member.name : String(member.name ?? '')}</p>
+                <div key={typeof member.id === 'string' || typeof member.id === 'number' ? String(member.id) : `member-${idx}`} className="flex flex-col gap-2 rounded-lg border border-gray-200 bg-gray-50/50 p-3 transition-all hover:bg-gray-50 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0">
+                    <p className="truncate font-semibold text-gray-900">{typeof member.name === 'string' ? member.name : String(member.name ?? '')}</p>
                     {member.email != null && String(member.email).trim() !== '' && (
-                      <p className="text-sm text-gray-600">{String(member.email)}</p>
+                      <p className="truncate text-sm text-gray-600">{String(member.email)}</p>
                     )}
                   </div>
-                  <span className="rounded-full bg-teal-100 px-4 py-1.5 text-sm font-medium text-teal-700">
+                  <span className="flex-shrink-0 self-start rounded-full bg-teal-100 px-4 py-1.5 text-sm font-medium text-teal-700 sm:self-auto">
                     {typeof member.role === 'string' ? member.role : String(member.role ?? '')}
                   </span>
                 </div>
@@ -295,17 +295,17 @@ export default function FamilySettingsPage() {
               {invitations.map((invitation) => (
                 <div
                   key={invitation.id}
-                  className="flex items-center justify-between rounded border p-3"
+                  className="flex flex-col gap-2 rounded border p-3 sm:flex-row sm:items-center sm:justify-between"
                 >
-                  <div>
-                    <p className="font-medium text-gray-900">{invitation.email}</p>
+                  <div className="min-w-0">
+                    <p className="truncate font-medium text-gray-900">{invitation.email}</p>
                     <p className="text-sm text-gray-600">
                       Sent {new Date(invitation.created_at).toLocaleDateString()}
                     </p>
                   </div>
                   <button
                     onClick={() => handleRevokeInvitation(invitation.id)}
-                    className="flex items-center gap-1 rounded px-3 py-1 text-sm text-red-600 hover:bg-red-50"
+                    className="flex flex-shrink-0 items-center gap-1 self-start rounded px-3 py-1 text-sm text-red-600 hover:bg-red-50 sm:self-auto"
                   >
                     <X className="h-4 w-4" />
                     Revoke
