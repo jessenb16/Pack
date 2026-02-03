@@ -1,7 +1,7 @@
 'use client';
 
 import { X, ZoomIn, Download, Trash2 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 export interface DocumentViewerDocument {
   id: string;
@@ -26,40 +26,50 @@ interface DocumentViewerProps {
   onDelete?: (documentId: string) => void;
 }
 
-export default function DocumentViewer({ 
-  isOpen, 
-  onClose, 
-  document: doc, 
-  uploaderId, 
+export default function DocumentViewer({
+  isOpen,
+  onClose,
+  document: doc,
+  uploaderId,
   currentUserId,
-  onDelete 
+  onDelete,
 }: DocumentViewerProps) {
   const [scale, setScale] = useState(1);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-  
-  // Compare as strings and ensure both are truthy (not empty strings)
-  // Only allow delete if uploaderId exists and matches currentUserId
-  const canDelete = Boolean(uploaderId && currentUserId && String(uploaderId).trim() !== '' && String(uploaderId) === String(currentUserId));
+
+  const canDelete = Boolean(
+    uploaderId &&
+      currentUserId &&
+      String(uploaderId).trim() !== '' &&
+      String(uploaderId) === String(currentUserId)
+  );
+
+  const handleEscape = useCallback(
+    (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    },
+    [onClose]
+  );
 
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden';
+      window.addEventListener('keydown', handleEscape);
       queueMicrotask(() => {
         setScale(1);
         setShowDeleteConfirm(false);
       });
-    } else {
-      document.body.style.overflow = 'unset';
     }
     return () => {
       document.body.style.overflow = 'unset';
+      window.removeEventListener('keydown', handleEscape);
     };
-  }, [isOpen]);
+  }, [isOpen, handleEscape]);
 
   const handleDelete = async () => {
     if (!doc || !onDelete) return;
-    
+
     if (!showDeleteConfirm) {
       setShowDeleteConfirm(true);
       return;
@@ -77,41 +87,64 @@ export default function DocumentViewer({
 
   if (!isOpen || !doc) return null;
 
-  const isPdf = doc.file_type === 'application/pdf' || doc.s3_original_url.toLowerCase().includes('.pdf');
+  const isPdf =
+    doc.file_type === 'application/pdf' ||
+    doc.s3_original_url.toLowerCase().includes('.pdf');
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 md:p-8">
-      {/* Close button - top right */}
-      <button 
-        onClick={onClose}
-        className="absolute right-4 top-4 z-50 rounded-full bg-white/10 p-2 text-white hover:bg-white/20 transition-colors"
+    <div
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/80 p-2 backdrop-blur-sm md:items-center md:p-8"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="document-viewer-title"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div
+        className="relative my-auto flex min-h-0 max-h-[min(95dvh,100%)] w-full max-w-6xl flex-col rounded-lg bg-white shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
       >
-        <X className="h-6 w-6" />
-      </button>
-
-      <div className="relative flex h-full w-full max-w-6xl flex-col rounded-lg bg-white shadow-2xl overflow-hidden">
-        {/* Header */}
-        <div className="flex flex-col gap-3 border-b bg-gray-50 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-          <div className="min-w-0">
-            <h2 className="truncate text-lg font-bold text-gray-900 sm:text-xl">
-              {doc.metadata.sender_name}
-              {doc.metadata.recipient_name && (
-                <span className="font-normal text-gray-600"> to {doc.metadata.recipient_name}</span>
-              )}
-            </h2>
-            <div className="mt-1 flex flex-wrap gap-2 text-sm text-gray-600 sm:gap-3">
-              <span className="rounded-full bg-gray-200 px-2 py-0.5 text-xs font-medium text-gray-700">
-                {doc.metadata.event_type}
-              </span>
-              <span>{new Date(doc.metadata.doc_date).toLocaleDateString()}</span>
+        {/* Header with close button - always visible at top */}
+        <div className="flex flex-shrink-0 flex-col gap-3 border-b bg-gray-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+          <div className="flex min-w-0 flex-1 items-start justify-between gap-2">
+            <div className="min-w-0 flex-1">
+              <h2
+                id="document-viewer-title"
+                className="truncate text-lg font-bold text-gray-900 sm:text-xl"
+              >
+                {doc.metadata.sender_name}
+                {doc.metadata.recipient_name && (
+                  <span className="font-normal text-gray-600">
+                    {' '}
+                    to {doc.metadata.recipient_name}
+                  </span>
+                )}
+              </h2>
+              <div className="mt-1 flex flex-wrap gap-2 text-sm text-gray-600 sm:gap-3">
+                <span className="rounded-full bg-gray-200 px-2 py-0.5 text-xs font-medium text-gray-700">
+                  {doc.metadata.event_type}
+                </span>
+                <span>
+                  {new Date(doc.metadata.doc_date).toLocaleDateString()}
+                </span>
+              </div>
             </div>
+            {/* Close button - inside header, always visible, prominent on mobile */}
+            <button
+              onClick={onClose}
+              className="flex flex-shrink-0 items-center justify-center rounded-full bg-gray-300 p-3 text-gray-800 transition-colors hover:bg-gray-400 active:bg-gray-500 min-w-[44px] min-h-[44px] md:bg-gray-200 md:p-2 md:min-w-0 md:min-h-0 md:hover:bg-gray-300"
+              aria-label="Close document"
+            >
+              <X className="h-6 w-6" />
+            </button>
           </div>
-          
+
           <div className="flex flex-shrink-0 flex-wrap gap-2">
             {!isPdf && (
-              <button 
+              <button
                 onClick={() => setScale(scale > 1 ? 1 : 1.5)}
-                className="flex items-center gap-1 rounded px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-200 transition-colors"
+                className="flex items-center gap-1 rounded-lg px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200 transition-colors"
                 title="Toggle Zoom"
               >
                 <ZoomIn className="h-4 w-4" />
@@ -122,22 +155,28 @@ export default function DocumentViewer({
               <button
                 onClick={handleDelete}
                 disabled={isDeleting}
-                className={`flex items-center gap-1 rounded px-4 py-1.5 text-sm font-medium text-white transition-colors ${
+                className={`flex items-center gap-1 rounded-lg px-4 py-2 text-sm font-medium text-white transition-colors ${
                   showDeleteConfirm
                     ? 'bg-red-600 hover:bg-red-700'
                     : 'bg-red-600 hover:bg-red-700'
-                } ${isDeleting ? 'opacity-50 cursor-not-allowed' : ''}`}
-                title={showDeleteConfirm ? 'Confirm deletion' : 'Delete document'}
+                } ${isDeleting ? 'cursor-not-allowed opacity-50' : ''}`}
+                title={
+                  showDeleteConfirm ? 'Confirm deletion' : 'Delete document'
+                }
               >
                 <Trash2 className="h-4 w-4" />
-                {isDeleting ? 'Deleting...' : showDeleteConfirm ? 'Confirm Delete' : 'Delete'}
+                {isDeleting
+                  ? 'Deleting...'
+                  : showDeleteConfirm
+                    ? 'Confirm Delete'
+                    : 'Delete'}
               </button>
             )}
-            <a 
-              href={doc.s3_original_url} 
-              target="_blank" 
+            <a
+              href={doc.s3_original_url}
+              target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-1 rounded bg-red-900 px-4 py-1.5 text-sm font-medium text-white hover:bg-red-800 transition-colors"
+              className="flex items-center gap-1 rounded-lg bg-red-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-800"
             >
               <Download className="h-4 w-4" />
               Download
@@ -145,21 +184,24 @@ export default function DocumentViewer({
           </div>
         </div>
 
-        {/* Content */}
-        <div className="flex-1 overflow-auto bg-gray-100 p-4 flex items-center justify-center">
+        {/* Content - scrollable */}
+        <div className="min-h-0 flex-1 overflow-auto bg-gray-100 p-4">
           {isPdf ? (
-            <iframe 
-              src={doc.s3_original_url} 
-              className="h-full w-full rounded shadow-sm bg-white"
+            <iframe
+              src={doc.s3_original_url}
+              className="h-full min-h-[60vh] w-full rounded shadow-sm bg-white"
               title="PDF Viewer"
             />
           ) : (
-            <div className={`transition-transform duration-300 ${scale > 1 ? 'cursor-zoom-out' : 'cursor-zoom-in'}`} onClick={() => setScale(scale > 1 ? 1 : 1.5)}>
+            <div
+              className={`flex items-center justify-center ${scale > 1 ? 'cursor-zoom-out' : 'cursor-zoom-in'}`}
+              onClick={() => setScale(scale > 1 ? 1 : 1.5)}
+            >
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img 
-                src={doc.s3_original_url} 
-                alt="Document" 
-                className="max-h-[80vh] w-auto object-contain rounded shadow-md"
+              <img
+                src={doc.s3_original_url}
+                alt="Document"
+                className="max-h-[70vh] max-w-full w-auto object-contain rounded shadow-md"
                 style={{ transform: `scale(${scale})` }}
               />
             </div>
@@ -169,4 +211,3 @@ export default function DocumentViewer({
     </div>
   );
 }
-
