@@ -52,16 +52,17 @@ function VaultContent() {
       );
       
       if (response.data) {
-        setDocuments(response.data as unknown as DocumentViewerDocument[]);
-        
+        const docs = response.data as unknown as DocumentViewerDocument[];
+        setDocuments(docs);
+
         // Only extract unique values for Smart Chips if we don't have them yet
         // (to avoid unnecessary processing on filter changes)
         if (senders.length === 0 || eventTypes.length === 0 || years.length === 0) {
           const uniqueSenders = new Set<string>();
           const uniqueEvents = new Set<string>();
           const uniqueYears = new Set<number>();
-          
-          response.data.forEach((doc: DocumentViewerDocument) => {
+
+          docs.forEach((doc) => {
             if (doc.metadata?.sender_name) uniqueSenders.add(doc.metadata.sender_name);
             if (doc.metadata?.event_type) uniqueEvents.add(doc.metadata.event_type);
             if (doc.metadata?.doc_date) {
@@ -69,7 +70,7 @@ function VaultContent() {
               uniqueYears.add(year);
             }
           });
-          
+
           setSenders(Array.from(uniqueSenders).sort());
           setEventTypes(Array.from(uniqueEvents).sort());
           setYears(Array.from(uniqueYears).sort((a, b) => b - a));
