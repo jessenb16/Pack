@@ -41,6 +41,9 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
 
       - name: Frontend install, lint, build
+        env:
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
+          NEXT_PUBLIC_API_URL: ${{ vars.NEXT_PUBLIC_API_URL || 'https://placeholder.invalid' }}
         run: |
           cd frontend
           npm ci
