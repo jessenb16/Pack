@@ -133,17 +133,18 @@ export default function ChatPage() {
                           // Debug: log each document
                           console.log(`Document ${idx}:`, doc);
                           
-                          const thumbnailUrl = doc.url || doc.s3_thumbnail_url || '';
-                          const originalUrl = doc.s3_original_url || doc.url || '';
+                          const thumbnailUrl = typeof doc.url === 'string' ? doc.url : typeof doc.s3_thumbnail_url === 'string' ? doc.s3_thumbnail_url : '';
+                          const originalUrl = typeof doc.s3_original_url === 'string' ? doc.s3_original_url : typeof doc.url === 'string' ? doc.url : '';
                           
                           if (!thumbnailUrl) {
                             console.warn('No thumbnail URL for document:', doc);
                             return null;
                           }
                           
+                          const summary = typeof doc.summary === 'string' ? doc.summary : '';
                           return (
                             <a
-                              key={doc.id || idx}
+                              key={`doc-${idx}`}
                               href={originalUrl}
                               target="_blank"
                               rel="noopener noreferrer"
@@ -151,18 +152,18 @@ export default function ChatPage() {
                             >
                               <img
                                 src={thumbnailUrl}
-                                alt={doc.summary || 'Document'}
+                                alt={summary || 'Document'}
                                 className="h-24 w-full object-cover"
                                 onError={(e) => {
                                   console.error('Image load error for:', thumbnailUrl, doc);
                                   (e.target as HTMLImageElement).style.display = 'none';
                                 }}
                               />
-                              {doc.summary && (
+                              {summary ? (
                                 <div className="absolute bottom-0 left-0 right-0 bg-black/60 p-1 text-xs text-white opacity-0 transition-opacity group-hover:opacity-100">
-                                  <p className="truncate">{doc.summary}</p>
+                                  <p className="truncate">{summary}</p>
                                 </div>
-                              )}
+                              ) : null}
                             </a>
                           );
                         })}
