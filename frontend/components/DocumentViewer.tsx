@@ -7,6 +7,7 @@ export interface DocumentViewerDocument {
   id: string;
   s3_original_url: string;
   s3_thumbnail_url?: string;
+  uploader_id?: string;
   metadata: {
     sender_name: string;
     event_type: string;
