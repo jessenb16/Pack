@@ -52,7 +52,7 @@ function VaultContent() {
       );
       
       if (response.data) {
-        setDocuments(response.data as DocumentViewerDocument[]);
+        setDocuments(response.data as unknown as DocumentViewerDocument[]);
         
         // Only extract unique values for Smart Chips if we don't have them yet
         // (to avoid unnecessary processing on filter changes)
