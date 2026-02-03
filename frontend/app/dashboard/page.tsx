@@ -68,7 +68,7 @@ export default function DashboardPage() {
       
       // Handle documents response
       if (documentsResponse.data) {
-        const docs = documentsResponse.data as DocumentViewerDocument[];
+        const docs = documentsResponse.data as unknown as DocumentViewerDocument[];
         setRecentDocs(docs.slice(0, 20));
         
         // Get "On This Day" documents
