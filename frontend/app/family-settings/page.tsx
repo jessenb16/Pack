@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useUser, useAuth, useOrganization } from '@clerk/nextjs';
+import { useUser, useAuth } from '@clerk/nextjs';
 import { useRouter } from 'next/navigation';
 import Navbar from '@/components/Navbar';
 import { apiClient } from '@/lib/api';
@@ -17,7 +17,6 @@ interface Invitation {
 export default function FamilySettingsPage() {
   const { user, isLoaded } = useUser();
   const { getToken } = useAuth();
-  const { organization: _organization } = useOrganization();
   const router = useRouter();
   const [family, setFamily] = useState<Record<string, unknown> | null>(null);
   const [members, setMembers] = useState<Record<string, unknown>[]>([]);
@@ -61,7 +60,7 @@ export default function FamilySettingsPage() {
       if (familyResponse.data) {
         setFamily(familyResponse.data);
         // Members are already included in familyResponse.data.members
-        setMembers(familyResponse.data.members || []);
+        setMembers(Array.isArray(familyResponse.data.members) ? (familyResponse.data.members as Record<string, unknown>[]) : []);
       } else if (familyResponse.error) {
         // If user doesn't have an organization, redirect to setup
         if (familyResponse.error.includes('not part of an organization') || 

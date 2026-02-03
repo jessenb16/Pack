@@ -22,7 +22,6 @@ export default function UploadPage() {
   const [useCustomEventType, setUseCustomEventType] = useState(false);
   const [members, setMembers] = useState<Array<{id: string; name: string; role: string}>>([]);
   const [eventTypes, setEventTypes] = useState<string[]>([]);
-  const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
@@ -34,7 +33,8 @@ export default function UploadPage() {
     }
 
     loadFamilyData();
-  }, [user, isLoaded]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, isLoaded, router]);
 
   async function loadFamilyData() {
     try {
@@ -43,8 +43,8 @@ export default function UploadPage() {
       
       if (familyResponse.data) {
         // Get members (would need a separate endpoint or include in family response)
-        setMembers(familyResponse.data.members || []);
-        setEventTypes(familyResponse.data.event_types || []);
+        setMembers(Array.isArray(familyResponse.data.members) ? (familyResponse.data.members as Array<{ id: string; name: string; role: string }>) : []);
+        setEventTypes(Array.isArray(familyResponse.data.event_types) ? (familyResponse.data.event_types as string[]) : []);
       }
     } catch (error) {
       console.error('Error loading family data:', error);
@@ -143,6 +143,7 @@ export default function UploadPage() {
             
             {preview && (
               <div className="mt-4">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={preview}
                   alt="Preview"

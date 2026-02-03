@@ -154,6 +154,7 @@ export default function DocumentViewer({
             />
           ) : (
             <div className={`transition-transform duration-300 ${scale > 1 ? 'cursor-zoom-out' : 'cursor-zoom-in'}`} onClick={() => setScale(scale > 1 ? 1 : 1.5)}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img 
                 src={doc.s3_original_url} 
                 alt="Document" 

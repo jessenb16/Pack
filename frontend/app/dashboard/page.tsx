@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useUser, useAuth, useOrganization } from '@clerk/nextjs';
+import { useUser, useAuth } from '@clerk/nextjs';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Navbar from '@/components/Navbar';
@@ -12,7 +12,6 @@ import { Calendar, Image as ImageIcon, Loader2, Mail, Users, ArrowRight } from '
 export default function DashboardPage() {
   const { user, isLoaded } = useUser();
   const { getToken } = useAuth();
-  const { organization: _organization } = useOrganization();
   const router = useRouter();
   const [recentDocs, setRecentDocs] = useState<DocumentViewerDocument[]>([]);
   const [onThisDay, setOnThisDay] = useState<DocumentViewerDocument[]>([]);
@@ -54,7 +53,7 @@ export default function DashboardPage() {
       if (familyResponse.data) {
         setFamily(familyResponse.data);
         // Members are already included in familyResponse.data.members
-        setMembers(familyResponse.data.members || []);
+        setMembers(Array.isArray(familyResponse.data.members) ? (familyResponse.data.members as Record<string, unknown>[]) : []);
       } else if (familyResponse.error) {
         // If error is about no organization, that's okay - user just needs to create one
         if (familyResponse.error.includes('not part of an organization') || 
@@ -222,6 +221,7 @@ export default function DashboardPage() {
                   className="group cursor-pointer overflow-hidden rounded-lg bg-white shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 border border-gray-100"
                   onClick={() => setSelectedDoc(doc)}
                 >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={doc.s3_thumbnail_url}
                     alt={doc.metadata?.sender_name || 'Document'}
@@ -255,6 +255,7 @@ export default function DashboardPage() {
                   className="group cursor-pointer overflow-hidden rounded-lg bg-white shadow-sm transition-all hover:shadow-md hover:scale-105 border border-gray-100"
                   onClick={() => setSelectedDoc(doc)}
                 >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={doc.s3_thumbnail_url}
                     alt={doc.metadata?.sender_name || 'Document'}

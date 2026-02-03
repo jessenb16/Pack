@@ -259,6 +259,7 @@ function VaultContent() {
                   className="group cursor-pointer overflow-hidden rounded-lg bg-white shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 border border-gray-100"
                   onClick={() => setSelectedDoc(doc)}
                 >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={doc.s3_thumbnail_url}
                     alt={doc.metadata?.sender_name || 'Document'}

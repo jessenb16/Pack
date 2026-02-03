@@ -35,7 +35,7 @@ export default function ChatPage() {
       router.push('/login');
       return;
     }
-  }, [user, isLoaded]);
+  }, [user, isLoaded, router]);
 
 
   useEffect(() => {
@@ -150,6 +150,7 @@ export default function ChatPage() {
                               rel="noopener noreferrer"
                               className="group relative overflow-hidden rounded border border-gray-200 transition-shadow hover:shadow-md"
                             >
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
                               <img
                                 src={thumbnailUrl}
                                 alt={summary || 'Document'}
