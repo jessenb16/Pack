@@ -150,11 +150,15 @@ async def send_invitation(
             detail="Clerk user ID not found"
         )
     
-    # Send invitation via Clerk
+    # Send invitation via Clerk; redirect to our app's sign-up so they use our page, not Clerk's hosted one
+    from app.core.config import settings
+    signup_redirect = f"{settings.FRONTEND_URL.rstrip('/')}/register" if settings.FRONTEND_URL else None
+
     invitation_result = send_clerk_organization_invitation(
         organization_id=org_id,
         email=invitation.email,
-        inviter_user_id=clerk_user_id
+        inviter_user_id=clerk_user_id,
+        redirect_url=signup_redirect
     )
     
     if not invitation_result:

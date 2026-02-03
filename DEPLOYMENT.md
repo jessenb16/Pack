@@ -195,6 +195,8 @@ Set these in the Lightsail container deployment. All values are **production**.
 
 Optional: `VECTOR_SEARCH_SCORE_THRESHOLD`, `MAX_CONTENT_LENGTH`, `CHECKPOINT_TTL_DAYS`, `DEBUG=false`.
 
+**Note:** When you modify a deployment in Lightsail, the UI often does **not** show existing environment variables—you have to re-add them. Use the table above as your checklist and keep your real values in a secure place (e.g. password manager or private doc) so you can paste them in when creating or editing a deployment.
+
 ---
 
 ### Vercel environment variables (steps 4 and 9)
@@ -223,11 +225,11 @@ aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --
 # 2. Build (use linux/amd64 so the image runs on Lightsail; required on Apple Silicon)
 docker build --platform linux/amd64 -t pack-backend:latest ./backend
 
-# 3. Tag for ECR (use colon before "latest")
-docker tag pack-backend:latest $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO:latest
+# 3. Tag for ECR (quote full image name so :latest is preserved)
+docker tag pack-backend:latest "$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO:latest"
 
 # 4. Push
-docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO:latest
+docker push "$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO:latest"
 ```
 
 ---

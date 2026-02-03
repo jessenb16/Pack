@@ -6,7 +6,14 @@
  * in components using useAuth().getToken() and passed to these methods.
  */
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+// Ensure base URL has a protocol so it's never treated as a relative path
+function normalizeApiBase(url: string): string {
+  const trimmed = (url || '').trim().replace(/\/+$/, '');
+  if (!trimmed) return 'http://localhost:8000';
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  return `https://${trimmed}`;
+}
+const API_BASE_URL = normalizeApiBase(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000');
 
 export interface ApiResponse<T> {
   data?: T;
