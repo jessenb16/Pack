@@ -75,7 +75,7 @@ export default function FamilySettingsPage() {
       
       // Handle invitations response (catch returns { error } so narrow with 'data' in)
       if ('data' in invitationsResponse && invitationsResponse.data) {
-        setInvitations(invitationsResponse.data);
+        setInvitations(Array.isArray(invitationsResponse.data) ? (invitationsResponse.data as unknown as Invitation[]) : []);
       } else if ('error' in invitationsResponse && invitationsResponse.error) {
         // Invitations might fail if user doesn't have permission, that's okay
         console.warn('Could not load invitations:', invitationsResponse.error);
@@ -112,7 +112,7 @@ export default function FamilySettingsPage() {
         // Reload invitations
         const invitationsResponse = await apiClient.getInvitations(token);
         if (invitationsResponse.data) {
-          setInvitations(invitationsResponse.data);
+          setInvitations(Array.isArray(invitationsResponse.data) ? (invitationsResponse.data as unknown as Invitation[]) : []);
         }
       } else {
         setMessage({ type: 'error', text: response.error || 'Failed to send invitation' });
@@ -142,7 +142,7 @@ export default function FamilySettingsPage() {
         // Reload invitations
         const invitationsResponse = await apiClient.getInvitations(token);
         if (invitationsResponse.data) {
-          setInvitations(invitationsResponse.data);
+          setInvitations(Array.isArray(invitationsResponse.data) ? (invitationsResponse.data as unknown as Invitation[]) : []);
         }
       } else {
         setMessage({ type: 'error', text: response.error || 'Failed to revoke invitation' });
@@ -191,13 +191,14 @@ export default function FamilySettingsPage() {
           <h2 className="mb-4 text-xl font-semibold text-gray-800">Family Information</h2>
           <div className="space-y-3 rounded-lg bg-blue-50/50 p-4">
             <p className="text-gray-700">
-              <span className="font-semibold text-gray-900">Family Name:</span> {family.name}
+              <span className="font-semibold text-gray-900">Family Name:</span> {typeof family.name === 'string' ? family.name : String(family.name ?? '')}
             </p>
             <p className="text-gray-700">
               <span className="font-semibold text-gray-900">Created:</span>{' '}
               {(() => {
-                if (family.created_at == null) return '—';
-                const d = new Date(family.created_at);
+                const raw = family.created_at;
+                if (raw == null) return '—';
+                const d = typeof raw === 'string' || typeof raw === 'number' ? new Date(raw) : new Date(String(raw));
                 return Number.isNaN(d.getTime()) ? '—' : d.toLocaleDateString();
               })()}
             </p>
@@ -216,16 +217,16 @@ export default function FamilySettingsPage() {
             </div>
           ) : (
             <div className="space-y-2">
-              {members.map((member) => (
-                <div key={member.id} className="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50/50 p-3 transition-all hover:bg-gray-50">
+              {members.map((member, idx) => (
+                <div key={typeof member.id === 'string' || typeof member.id === 'number' ? String(member.id) : `member-${idx}`} className="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50/50 p-3 transition-all hover:bg-gray-50">
                   <div>
-                    <p className="font-semibold text-gray-900">{member.name}</p>
-                    {member.email && (
-                      <p className="text-sm text-gray-600">{member.email}</p>
+                    <p className="font-semibold text-gray-900">{typeof member.name === 'string' ? member.name : String(member.name ?? '')}</p>
+                    {member.email != null && String(member.email).trim() !== '' && (
+                      <p className="text-sm text-gray-600">{String(member.email)}</p>
                     )}
                   </div>
                   <span className="rounded-full bg-teal-100 px-4 py-1.5 text-sm font-medium text-teal-700">
-                    {member.role}
+                    {typeof member.role === 'string' ? member.role : String(member.role ?? '')}
                   </span>
                 </div>
               ))}
