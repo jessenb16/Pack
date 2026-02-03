@@ -78,12 +78,51 @@ jobs:
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:${{ github.sha }}
           echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:latest" >> $GITHUB_OUTPUT
 
-      - name: Deploy to Lightsail
+      # Build container spec with env vars so every deployment gets them (no re-adding in Lightsail UI)
+      - name: Prepare Lightsail container spec
         env:
-          ECR_REGISTRY: ${{ steps.ecr-login.outputs.registry }}
           IMAGE_URI: ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest
+          CONTAINER_NAME: ${{ env.CONTAINER_NAME }}
+          MONGODB_URI: ${{ secrets.MONGODB_URI }}
+          DATABASE_NAME: ${{ vars.DATABASE_NAME }}
+          CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
+          CLERK_WEBHOOK_SECRET: ${{ secrets.CLERK_WEBHOOK_SECRET }}
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_S3_BUCKET_NAME: ${{ vars.AWS_S3_BUCKET_NAME }}
+          AWS_REGION: ${{ env.AWS_REGION }}
+          FRONTEND_URL: ${{ vars.FRONTEND_URL }}
+          LANGSMITH_TRACING_V2: ${{ vars.LANGSMITH_TRACING_V2 }}
+          LANGSMITH_ENDPOINT: ${{ vars.LANGSMITH_ENDPOINT }}
+          LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
+          LANGSMITH_PROJECT: ${{ vars.LANGSMITH_PROJECT }}
+        run: |
+          python3 << 'PY' > containers.json
+          import os, json
+          keys = [
+            "MONGODB_URI", "DATABASE_NAME", "CLERK_SECRET_KEY", "CLERK_WEBHOOK_SECRET",
+            "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY", "OPENAI_API_KEY", "AWS_ACCESS_KEY_ID",
+            "AWS_SECRET_ACCESS_KEY", "AWS_S3_BUCKET_NAME", "AWS_REGION", "FRONTEND_URL",
+            "LANGSMITH_TRACING_V2", "LANGSMITH_ENDPOINT", "LANGSMITH_API_KEY", "LANGSMITH_PROJECT"
+          ]
+          env = {k: os.environ[k] for k in keys if os.environ.get(k)}
+          name = os.environ["CONTAINER_NAME"]
+          image = os.environ["IMAGE_URI"]
+          containers = {
+            name: {
+              "image": image,
+              "ports": {"8000": "HTTP"},
+              "environment": env
+            }
+          }
+          print(json.dumps(containers))
+          PY
+
+      - name: Deploy to Lightsail
         run: |
           aws lightsail create-container-service-deployment \
             --service-name ${{ env.LIGHTSAIL_SERVICE_NAME }} \
-            --containers "{\"${{ env.CONTAINER_NAME }}\":{\"image\":\"$IMAGE_URI\",\"ports\":{\"8000\":\"HTTP\"}}}" \
+            --containers file://containers.json \
             --public-endpoint "{\"containerName\":\"${{ env.CONTAINER_NAME }}\",\"containerPort\":8000,\"healthCheck\":{\"path\":\"/health\"}}"

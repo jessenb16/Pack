@@ -197,6 +197,11 @@ Optional: `VECTOR_SEARCH_SCORE_THRESHOLD`, `MAX_CONTENT_LENGTH`, `CHECKPOINT_TTL
 
 **Note:** When you modify a deployment in Lightsail, the UI often does **not** show existing environment variables—you have to re-add them. Use the table above as your checklist and keep your real values in a secure place (e.g. password manager or private doc) so you can paste them in when creating or editing a deployment.
 
+**GitHub Actions (recommended):** The deploy workflow passes these env vars to Lightsail on every push to `main`, so you don’t have to re-add them in the Lightsail UI after each deploy. Add them once in GitHub → repo **Settings** → **Secrets and variables** → **Actions**:
+- **Secrets:** `MONGODB_URI`, `CLERK_SECRET_KEY`, `CLERK_WEBHOOK_SECRET`, `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `OPENAI_API_KEY`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`
+- **Variables:** `DATABASE_NAME`, `AWS_S3_BUCKET_NAME`, `AWS_REGION` (or use workflow default), `FRONTEND_URL` (e.g. `https://pack-wine.vercel.app`), `LANGSMITH_TRACING_V2` (e.g. `true`), `LANGSMITH_ENDPOINT`, `LANGSMITH_PROJECT`
+- **Secrets (LangSmith):** `LANGSMITH_API_KEY`
+
 ---
 
 ### Vercel environment variables (steps 4 and 9)
