@@ -19,6 +19,38 @@ export default function DashboardPage() {
   const [members, setMembers] = useState<Record<string, unknown>[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedDoc, setSelectedDoc] = useState<DocumentViewerDocument | null>(null);
+  const [nameForm, setNameForm] = useState({ firstName: '', lastName: '' });
+  const [nameSaving, setNameSaving] = useState(false);
+  const [nameError, setNameError] = useState<string | null>(null);
+
+  const needsName = isLoaded && user && !(user.firstName?.trim());
+
+  useEffect(() => {
+    if (user && needsName && !nameForm.firstName && !nameForm.lastName) {
+      setNameForm({
+        firstName: user.firstName?.trim() ?? '',
+        lastName: user.lastName?.trim() ?? '',
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only prefill once; including nameForm would reset on every keystroke
+  }, [user, needsName]);
+
+  async function handleSaveName(e: React.FormEvent) {
+    e.preventDefault();
+    if (!user || !nameForm.firstName.trim()) return;
+    setNameError(null);
+    setNameSaving(true);
+    try {
+      await user.update({
+        firstName: nameForm.firstName.trim(),
+        lastName: nameForm.lastName.trim() || undefined,
+      });
+    } catch (err) {
+      setNameError(err instanceof Error ? err.message : 'Failed to save name');
+    } finally {
+      setNameSaving(false);
+    }
+  }
 
   useEffect(() => {
     if (!isLoaded) return;
@@ -134,7 +166,58 @@ export default function DashboardPage() {
           currentUserId={user?.id}
           onDelete={handleDelete}
         />
-        
+
+        {/* Ask invited users (or anyone without a name) to set their display name */}
+        {needsName && (
+          <section className="mb-8 rounded-xl border border-purple-200 bg-gradient-to-r from-purple-50/80 to-indigo-50/80 p-6 shadow-md">
+            <h2 className="mb-2 text-xl font-bold text-gray-900">What should we call you?</h2>
+            <p className="mb-4 text-gray-600">
+              Enter your first and last name so your family can recognize you in Pack.
+            </p>
+            <form onSubmit={handleSaveName} className="flex flex-wrap items-end gap-4">
+              <div>
+                <label htmlFor="firstName" className="mb-1 block text-sm font-medium text-gray-700">
+                  First name
+                </label>
+                <input
+                  id="firstName"
+                  type="text"
+                  required
+                  value={nameForm.firstName}
+                  onChange={(e) => setNameForm((f) => ({ ...f, firstName: e.target.value }))}
+                  placeholder="First name"
+                  className="rounded-lg border border-gray-300 px-3 py-2 focus:border-purple-500 focus:outline-none focus:ring-1 focus:ring-purple-500"
+                  autoComplete="given-name"
+                />
+              </div>
+              <div>
+                <label htmlFor="lastName" className="mb-1 block text-sm font-medium text-gray-700">
+                  Last name
+                </label>
+                <input
+                  id="lastName"
+                  type="text"
+                  value={nameForm.lastName}
+                  onChange={(e) => setNameForm((f) => ({ ...f, lastName: e.target.value }))}
+                  placeholder="Last name"
+                  className="rounded-lg border border-gray-300 px-3 py-2 focus:border-purple-500 focus:outline-none focus:ring-1 focus:ring-purple-500"
+                  autoComplete="family-name"
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={nameSaving || !nameForm.firstName.trim()}
+                className="rounded-lg bg-purple-600 px-4 py-2 text-white transition-colors hover:bg-purple-700 disabled:opacity-50"
+              >
+                {nameSaving ? 'Saving…' : 'Save'}
+              </button>
+            </form>
+            {nameError && (
+              <p className="mt-2 text-sm text-red-600">{nameError}</p>
+            )}
+          </section>
+        )}
+
         <h1 className="mb-8 text-3xl font-bold text-gray-800">Dashboard</h1>
         
         {loading && (
