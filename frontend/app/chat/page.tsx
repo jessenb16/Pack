@@ -10,7 +10,7 @@ import { Send, Loader2 } from 'lucide-react';
 interface Message {
   role: 'user' | 'assistant';
   content: string;
-  documents?: any[];
+  documents?: Record<string, unknown>[];
 }
 
 export default function ChatPage() {
@@ -35,7 +35,7 @@ export default function ChatPage() {
       router.push('/login');
       return;
     }
-  }, [user, isLoaded]);
+  }, [user, isLoaded, router]);
 
 
   useEffect(() => {
@@ -106,7 +106,7 @@ export default function ChatPage() {
             {messages.length === 0 && (
               <div className="text-center text-gray-500">
                 <p className="mb-2 text-lg">Ask me anything about your family memories!</p>
-                <p className="text-sm">Try: "Show me birthday cards from Mom" or "What advice did Dad give?"</p>
+                <p className="text-sm">Try: &quot;Show me birthday cards from Mom&quot; or &quot;What advice did Dad give?&quot;</p>
               </div>
             )}
             
@@ -129,40 +129,42 @@ export default function ChatPage() {
                     <div className="mt-3 space-y-2">
                       <p className="text-xs font-semibold text-gray-600">Referenced Documents:</p>
                       <div className="grid grid-cols-2 gap-2">
-                        {message.documents.slice(0, 6).map((doc: any, idx: number) => {
+                        {message.documents.slice(0, 6).map((doc: Record<string, unknown>, idx: number) => {
                           // Debug: log each document
                           console.log(`Document ${idx}:`, doc);
                           
-                          const thumbnailUrl = doc.url || doc.s3_thumbnail_url || '';
-                          const originalUrl = doc.s3_original_url || doc.url || '';
+                          const thumbnailUrl = typeof doc.url === 'string' ? doc.url : typeof doc.s3_thumbnail_url === 'string' ? doc.s3_thumbnail_url : '';
+                          const originalUrl = typeof doc.s3_original_url === 'string' ? doc.s3_original_url : typeof doc.url === 'string' ? doc.url : '';
                           
                           if (!thumbnailUrl) {
                             console.warn('No thumbnail URL for document:', doc);
                             return null;
                           }
                           
+                          const summary = typeof doc.summary === 'string' ? doc.summary : '';
                           return (
                             <a
-                              key={doc.id || idx}
+                              key={`doc-${idx}`}
                               href={originalUrl}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="group relative overflow-hidden rounded border border-gray-200 transition-shadow hover:shadow-md"
                             >
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
                               <img
                                 src={thumbnailUrl}
-                                alt={doc.summary || 'Document'}
+                                alt={summary || 'Document'}
                                 className="h-24 w-full object-cover"
                                 onError={(e) => {
                                   console.error('Image load error for:', thumbnailUrl, doc);
                                   (e.target as HTMLImageElement).style.display = 'none';
                                 }}
                               />
-                              {doc.summary && (
+                              {summary ? (
                                 <div className="absolute bottom-0 left-0 right-0 bg-black/60 p-1 text-xs text-white opacity-0 transition-opacity group-hover:opacity-100">
-                                  <p className="truncate">{doc.summary}</p>
+                                  <p className="truncate">{summary}</p>
                                 </div>
-                              )}
+                              ) : null}
                             </a>
                           );
                         })}

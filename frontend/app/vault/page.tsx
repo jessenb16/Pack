@@ -1,24 +1,24 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useUser, useAuth } from '@clerk/nextjs';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Navbar from '@/components/Navbar';
-import DocumentViewer from '@/components/DocumentViewer';
+import DocumentViewer, { type DocumentViewerDocument } from '@/components/DocumentViewer';
 import { apiClient } from '@/lib/api';
 import { X, Loader2 } from 'lucide-react';
 
-export default function VaultPage() {
+function VaultContent() {
   const { user, isLoaded } = useUser();
   const { getToken } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [documents, setDocuments] = useState<any[]>([]);
+  const [documents, setDocuments] = useState<DocumentViewerDocument[]>([]);
   const [loading, setLoading] = useState(true);
   const [senders, setSenders] = useState<string[]>([]);
   const [eventTypes, setEventTypes] = useState<string[]>([]);
   const [years, setYears] = useState<number[]>([]);
-  const [selectedDoc, setSelectedDoc] = useState<any>(null);
+  const [selectedDoc, setSelectedDoc] = useState<DocumentViewerDocument | null>(null);
   
   const [filters, setFilters] = useState({
     sender: searchParams.get('sender') || '',
@@ -52,16 +52,17 @@ export default function VaultPage() {
       );
       
       if (response.data) {
-        setDocuments(response.data);
-        
+        const docs = response.data as unknown as DocumentViewerDocument[];
+        setDocuments(docs);
+
         // Only extract unique values for Smart Chips if we don't have them yet
         // (to avoid unnecessary processing on filter changes)
         if (senders.length === 0 || eventTypes.length === 0 || years.length === 0) {
           const uniqueSenders = new Set<string>();
           const uniqueEvents = new Set<string>();
           const uniqueYears = new Set<number>();
-          
-          response.data.forEach((doc: any) => {
+
+          docs.forEach((doc) => {
             if (doc.metadata?.sender_name) uniqueSenders.add(doc.metadata.sender_name);
             if (doc.metadata?.event_type) uniqueEvents.add(doc.metadata.event_type);
             if (doc.metadata?.doc_date) {
@@ -69,7 +70,7 @@ export default function VaultPage() {
               uniqueYears.add(year);
             }
           });
-          
+
           setSenders(Array.from(uniqueSenders).sort());
           setEventTypes(Array.from(uniqueEvents).sort());
           setYears(Array.from(uniqueYears).sort((a, b) => b - a));
@@ -259,6 +260,7 @@ export default function VaultPage() {
                   className="group cursor-pointer overflow-hidden rounded-lg bg-white shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 border border-gray-100"
                   onClick={() => setSelectedDoc(doc)}
                 >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={doc.s3_thumbnail_url}
                     alt={doc.metadata?.sender_name || 'Document'}
@@ -280,6 +282,20 @@ export default function VaultPage() {
         </div>
       </main>
     </div>
+  );
+}
+
+export default function VaultPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-red-900" />
+        </div>
+      }
+    >
+      <VaultContent />
+    </Suspense>
   );
 }
 

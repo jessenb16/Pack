@@ -6,7 +6,14 @@
  * in components using useAuth().getToken() and passed to these methods.
  */
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+// Ensure base URL has a protocol so it's never treated as a relative path
+function normalizeApiBase(url: string): string {
+  const trimmed = (url || '').trim().replace(/\/+$/, '');
+  if (!trimmed) return 'http://localhost:8000';
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  return `https://${trimmed}`;
+}
+const API_BASE_URL = normalizeApiBase(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000');
 
 export interface ApiResponse<T> {
   data?: T;
@@ -64,18 +71,18 @@ class ApiClient {
 
   // Family endpoints
   async getFamily(token?: string | null) {
-    return this.request<any>('/api/families/me', {}, token);
+    return this.request<Record<string, unknown>>('/api/families/me', {}, token);
   }
 
   async createFamily(name: string, token?: string | null) {
-    return this.request<any>('/api/families', {
+    return this.request<Record<string, unknown>>('/api/families', {
       method: 'POST',
       body: JSON.stringify({ name }),
     }, token);
   }
 
   async getFamilyMembers(token?: string | null) {
-    return this.request<any[]>('/api/families/members', {}, token);
+    return this.request<Record<string, unknown>[]>('/api/families/members', {}, token);
   }
 
   // Document endpoints
@@ -86,7 +93,7 @@ class ApiClient {
     if (filters?.year) params.append('year', filters.year.toString());
     
     const query = params.toString();
-    return this.request<any[]>(`/api/documents${query ? `?${query}` : ''}`, {}, token);
+    return this.request<Record<string, unknown>[]>(`/api/documents${query ? `?${query}` : ''}`, {}, token);
   }
 
   async uploadDocument(file: File, metadata: {
@@ -166,7 +173,7 @@ class ApiClient {
       type: string;  // "filter" or "detective"
       content: {
         answer: string;
-        documents?: any[];
+        documents?: Record<string, unknown>[];
       };
       count: number;
     }>('/api/chat/ask', {
@@ -184,7 +191,7 @@ class ApiClient {
   }
 
   async getInvitations(token?: string | null) {
-    return this.request<any[]>('/api/families/invitations', {}, token);
+    return this.request<Record<string, unknown>[]>('/api/families/invitations', {}, token);
   }
 
   async revokeInvitation(invitationId: string, token?: string | null) {

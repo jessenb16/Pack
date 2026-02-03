@@ -195,6 +195,13 @@ Set these in the Lightsail container deployment. All values are **production**.
 
 Optional: `VECTOR_SEARCH_SCORE_THRESHOLD`, `MAX_CONTENT_LENGTH`, `CHECKPOINT_TTL_DAYS`, `DEBUG=false`.
 
+**Note:** When you modify a deployment in Lightsail, the UI often does **not** show existing environment variables—you have to re-add them. Use the table above as your checklist and keep your real values in a secure place (e.g. password manager or private doc) so you can paste them in when creating or editing a deployment.
+
+**GitHub Actions (recommended):** The deploy workflow passes these env vars to Lightsail on every push to `main`, so you don’t have to re-add them in the Lightsail UI after each deploy. Add them once in GitHub → repo **Settings** → **Secrets and variables** → **Actions**:
+- **Secrets:** `MONGODB_URI`, `CLERK_SECRET_KEY`, `CLERK_WEBHOOK_SECRET`, `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `OPENAI_API_KEY`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`
+- **Variables:** `DATABASE_NAME`, `AWS_S3_BUCKET_NAME`, `AWS_REGION` (or use workflow default), `FRONTEND_URL` (e.g. `https://pack-wine.vercel.app`), `LANGSMITH_TRACING_V2` (e.g. `true`), `LANGSMITH_ENDPOINT`, `LANGSMITH_PROJECT`
+- **Secrets (LangSmith):** `LANGSMITH_API_KEY`
+
 ---
 
 ### Vercel environment variables (steps 4 and 9)
@@ -220,14 +227,14 @@ export ECR_REPO=pack-backend
 # 1. Log in to ECR
 aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
 
-# 2. Build
-docker build -t pack-backend:latest ./backend
+# 2. Build (use linux/amd64 so the image runs on Lightsail; required on Apple Silicon)
+docker build --platform linux/amd64 -t pack-backend:latest ./backend
 
-# 3. Tag for ECR (use colon before "latest")
-docker tag pack-backend:latest $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO:latest
+# 3. Tag for ECR (quote full image name so :latest is preserved)
+docker tag pack-backend:latest "$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO:latest"
 
 # 4. Push
-docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO:latest
+docker push "$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO:latest"
 ```
 
 ---

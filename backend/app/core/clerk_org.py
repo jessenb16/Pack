@@ -4,7 +4,6 @@ import requests
 from typing import Optional, Dict
 import logging
 from time import time
-from functools import lru_cache
 
 logger = logging.getLogger(__name__)
 
@@ -145,7 +144,8 @@ def send_clerk_organization_invitation(
     organization_id: str,
     email: str,
     inviter_user_id: str,
-    role: str = "org:member"
+    role: str = "org:member",
+    redirect_url: Optional[str] = None
 ) -> Optional[Dict]:
     """
     Send an invitation to join a Clerk organization.
@@ -155,6 +155,7 @@ def send_clerk_organization_invitation(
         email: Email address of the invitee
         inviter_user_id: Clerk user ID of the person sending the invitation
         role: Role to assign (default: "org:member")
+        redirect_url: Optional URL where the invitee lands after accepting (e.g. your app's sign-up page)
         
     Returns:
         Invitation data from Clerk, or None if failed
@@ -170,6 +171,8 @@ def send_clerk_organization_invitation(
             "inviter_user_id": inviter_user_id,
             "role": role
         }
+        if redirect_url:
+            data["redirect_url"] = redirect_url
         
         response = requests.post(
             f"{CLERK_API_URL}/organizations/{organization_id}/invitations",

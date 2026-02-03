@@ -1,25 +1,56 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useUser, useAuth, useOrganization } from '@clerk/nextjs';
+import { useUser, useAuth } from '@clerk/nextjs';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Navbar from '@/components/Navbar';
-import DocumentViewer from '@/components/DocumentViewer';
+import DocumentViewer, { type DocumentViewerDocument } from '@/components/DocumentViewer';
 import { apiClient } from '@/lib/api';
 import { Calendar, Image as ImageIcon, Loader2, Mail, Users, ArrowRight } from 'lucide-react';
 
 export default function DashboardPage() {
   const { user, isLoaded } = useUser();
   const { getToken } = useAuth();
-  const { organization } = useOrganization();
   const router = useRouter();
-  const [recentDocs, setRecentDocs] = useState<any[]>([]);
-  const [onThisDay, setOnThisDay] = useState<any[]>([]);
-  const [family, setFamily] = useState<any>(null);
-  const [members, setMembers] = useState<any[]>([]);
+  const [recentDocs, setRecentDocs] = useState<DocumentViewerDocument[]>([]);
+  const [onThisDay, setOnThisDay] = useState<DocumentViewerDocument[]>([]);
+  const [family, setFamily] = useState<Record<string, unknown> | null>(null);
+  const [members, setMembers] = useState<Record<string, unknown>[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedDoc, setSelectedDoc] = useState<any>(null);
+  const [selectedDoc, setSelectedDoc] = useState<DocumentViewerDocument | null>(null);
+  const [nameForm, setNameForm] = useState({ firstName: '', lastName: '' });
+  const [nameSaving, setNameSaving] = useState(false);
+  const [nameError, setNameError] = useState<string | null>(null);
+
+  const needsName = isLoaded && user && !(user.firstName?.trim());
+
+  useEffect(() => {
+    if (user && needsName && !nameForm.firstName && !nameForm.lastName) {
+      setNameForm({
+        firstName: user.firstName?.trim() ?? '',
+        lastName: user.lastName?.trim() ?? '',
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only prefill once; including nameForm would reset on every keystroke
+  }, [user, needsName]);
+
+  async function handleSaveName(e: React.FormEvent) {
+    e.preventDefault();
+    if (!user || !nameForm.firstName.trim()) return;
+    setNameError(null);
+    setNameSaving(true);
+    try {
+      await user.update({
+        firstName: nameForm.firstName.trim(),
+        lastName: nameForm.lastName.trim() || undefined,
+      });
+    } catch (err) {
+      setNameError(err instanceof Error ? err.message : 'Failed to save name');
+    } finally {
+      setNameSaving(false);
+    }
+  }
 
   useEffect(() => {
     if (!isLoaded) return;
@@ -54,7 +85,7 @@ export default function DashboardPage() {
       if (familyResponse.data) {
         setFamily(familyResponse.data);
         // Members are already included in familyResponse.data.members
-        setMembers(familyResponse.data.members || []);
+        setMembers(Array.isArray(familyResponse.data.members) ? (familyResponse.data.members as Record<string, unknown>[]) : []);
       } else if (familyResponse.error) {
         // If error is about no organization, that's okay - user just needs to create one
         if (familyResponse.error.includes('not part of an organization') || 
@@ -69,12 +100,13 @@ export default function DashboardPage() {
       
       // Handle documents response
       if (documentsResponse.data) {
-        setRecentDocs(documentsResponse.data.slice(0, 20));
+        const docs = documentsResponse.data as unknown as DocumentViewerDocument[];
+        setRecentDocs(docs.slice(0, 20));
         
         // Get "On This Day" documents
         const today = new Date();
         const todayStr = `${today.getMonth() + 1}-${today.getDate()}`;
-        const onThisDayDocs = documentsResponse.data.filter((doc: any) => {
+        const onThisDayDocs = docs.filter((doc) => {
           const docDate = doc.metadata?.doc_date;
           if (!docDate) return false;
           const date = new Date(docDate);
@@ -134,7 +166,58 @@ export default function DashboardPage() {
           currentUserId={user?.id}
           onDelete={handleDelete}
         />
-        
+
+        {/* Ask invited users (or anyone without a name) to set their display name */}
+        {needsName && (
+          <section className="mb-8 rounded-xl border border-purple-200 bg-gradient-to-r from-purple-50/80 to-indigo-50/80 p-6 shadow-md">
+            <h2 className="mb-2 text-xl font-bold text-gray-900">What should we call you?</h2>
+            <p className="mb-4 text-gray-600">
+              Enter your first and last name so your family can recognize you in Pack.
+            </p>
+            <form onSubmit={handleSaveName} className="flex flex-wrap items-end gap-4">
+              <div>
+                <label htmlFor="firstName" className="mb-1 block text-sm font-medium text-gray-700">
+                  First name
+                </label>
+                <input
+                  id="firstName"
+                  type="text"
+                  required
+                  value={nameForm.firstName}
+                  onChange={(e) => setNameForm((f) => ({ ...f, firstName: e.target.value }))}
+                  placeholder="First name"
+                  className="rounded-lg border border-gray-300 px-3 py-2 focus:border-purple-500 focus:outline-none focus:ring-1 focus:ring-purple-500"
+                  autoComplete="given-name"
+                />
+              </div>
+              <div>
+                <label htmlFor="lastName" className="mb-1 block text-sm font-medium text-gray-700">
+                  Last name
+                </label>
+                <input
+                  id="lastName"
+                  type="text"
+                  value={nameForm.lastName}
+                  onChange={(e) => setNameForm((f) => ({ ...f, lastName: e.target.value }))}
+                  placeholder="Last name"
+                  className="rounded-lg border border-gray-300 px-3 py-2 focus:border-purple-500 focus:outline-none focus:ring-1 focus:ring-purple-500"
+                  autoComplete="family-name"
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={nameSaving || !nameForm.firstName.trim()}
+                className="rounded-lg bg-purple-600 px-4 py-2 text-white transition-colors hover:bg-purple-700 disabled:opacity-50"
+              >
+                {nameSaving ? 'Saving…' : 'Save'}
+              </button>
+            </form>
+            {nameError && (
+              <p className="mt-2 text-sm text-red-600">{nameError}</p>
+            )}
+          </section>
+        )}
+
         <h1 className="mb-8 text-3xl font-bold text-gray-800">Dashboard</h1>
         
         {loading && (
@@ -221,6 +304,7 @@ export default function DashboardPage() {
                   className="group cursor-pointer overflow-hidden rounded-lg bg-white shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 border border-gray-100"
                   onClick={() => setSelectedDoc(doc)}
                 >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={doc.s3_thumbnail_url}
                     alt={doc.metadata?.sender_name || 'Document'}
@@ -254,6 +338,7 @@ export default function DashboardPage() {
                   className="group cursor-pointer overflow-hidden rounded-lg bg-white shadow-sm transition-all hover:shadow-md hover:scale-105 border border-gray-100"
                   onClick={() => setSelectedDoc(doc)}
                 >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={doc.s3_thumbnail_url}
                     alt={doc.metadata?.sender_name || 'Document'}

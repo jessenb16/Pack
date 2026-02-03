@@ -28,10 +28,6 @@ export default function RegisterPage() {
               card: "shadow-xl",
             }
           }}
-          // Ensure first name and last name fields are shown
-          additionalOAuthScopes={{
-            google: "profile email",
-          }}
         />
         <p className="mt-4 text-center text-white/80">
           Already have an account?{' '}
