@@ -17,10 +17,10 @@ interface Invitation {
 export default function FamilySettingsPage() {
   const { user, isLoaded } = useUser();
   const { getToken } = useAuth();
-  const { organization } = useOrganization();
+  const { organization: _organization } = useOrganization();
   const router = useRouter();
-  const [family, setFamily] = useState<any>(null);
-  const [members, setMembers] = useState<any[]>([]);
+  const [family, setFamily] = useState<Record<string, unknown> | null>(null);
+  const [members, setMembers] = useState<Record<string, unknown>[]>([]);
   const [invitations, setInvitations] = useState<Invitation[]>([]);
   const [loading, setLoading] = useState(true);
   const [inviteEmail, setInviteEmail] = useState('');
@@ -267,7 +267,7 @@ export default function FamilySettingsPage() {
                 disabled={sending}
               />
               <p className="mt-1 text-sm text-gray-500">
-                The invitee will receive an email with a link to join. They'll create their account when they accept the invitation.
+                The invitee will receive an email with a link to join. They&apos;ll create their account when they accept the invitation.
               </p>
             </div>
             <button

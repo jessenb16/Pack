@@ -1,48 +1,36 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useUser, useAuth, useOrganizationList } from '@clerk/nextjs';
+import { useEffect } from 'react';
+import { useUser, useOrganizationList } from '@clerk/nextjs';
 import { useRouter } from 'next/navigation';
 import { CreateOrganization } from '@clerk/nextjs';
 import Navbar from '@/components/Navbar';
-import { apiClient } from '@/lib/api';
-import { Loader2 } from 'lucide-react';
 
 export default function FamilySetupPage() {
   const { user, isLoaded } = useUser();
-  const { getToken } = useAuth();
   const { userMemberships, isLoaded: orgListLoaded } = useOrganizationList({
     userMemberships: true,
   });
   const router = useRouter();
-  const [checking, setChecking] = useState(true);
-  const [syncing, setSyncing] = useState(false);
 
   const memberships = userMemberships?.data ?? [];
+  const stillLoading = !isLoaded || !orgListLoaded || userMemberships?.isLoading;
+  const shouldShowForm = !stillLoading && !!user && memberships.length === 0;
 
   useEffect(() => {
-    if (!isLoaded || !orgListLoaded) return;
-    
+    if (stillLoading) return;
     if (!user) {
       router.push('/login');
       return;
     }
-
-    // Wait for memberships to finish loading
-    if (userMemberships?.isLoading) return;
-
-    // If user already has an organization, redirect to dashboard
     if (memberships.length > 0) {
       router.push('/dashboard');
       return;
     }
-
-    // User doesn't have an organization, show the create form
-    setChecking(false);
-  }, [user, isLoaded, orgListLoaded, userMemberships?.isLoading, memberships.length, router]);
+  }, [stillLoading, user, memberships.length, router]);
 
 
-  if (!isLoaded || !orgListLoaded || userMemberships?.isLoading || checking) {
+  if (!isLoaded || !orgListLoaded || userMemberships?.isLoading || !shouldShowForm) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <div className="text-lg">Loading...</div>
@@ -58,7 +46,7 @@ export default function FamilySetupPage() {
         <div className="rounded-lg bg-white p-8 shadow">
           <h1 className="mb-4 text-3xl font-bold text-gray-900">Set Up Your Family</h1>
           <p className="mb-8 text-gray-600">
-            Create a family organization to start organizing your memories. After creating your family, you'll be able to:
+            Create a family organization to start organizing your memories. After creating your family, you&apos;ll be able to:
           </p>
           
           <ul className="mb-8 list-disc space-y-2 pl-6 text-gray-600">

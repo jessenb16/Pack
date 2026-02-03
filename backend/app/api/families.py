@@ -1,17 +1,14 @@
 """Family/Organization API endpoints."""
-from fastapi import APIRouter, Depends, HTTPException, status, Header, Body
-from typing import Optional, List
+from fastapi import APIRouter, Depends, HTTPException, status, Body
 from pydantic import BaseModel, EmailStr
 from pymongo.database import Database
 import logging
-import requests
-import os
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 
 from app.core.database import get_db
 from app.api.auth import get_current_user_light
-from app.core.clerk_auth import get_clerk_organization, get_clerk_secret_key
+from app.core.clerk_auth import get_clerk_organization
 from app.core.clerk_org import (
     send_clerk_organization_invitation,
     get_clerk_organization_invitations,
@@ -23,8 +20,6 @@ from app.services.org_settings import get_org_settings, update_org_settings
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-CLERK_API_URL = "https://api.clerk.com/v1"
 
 
 @router.get("/me")
@@ -102,7 +97,6 @@ async def get_family_members(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="User is not part of an organization"
         )
-    """Get all members of the current user's organization from Clerk."""
     memberships = get_organization_members(org_id)
     
     members = []
@@ -185,7 +179,6 @@ async def get_invitations(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="User is not part of an organization"
         )
-    """Get pending invitations for the organization."""
     # Get pending invitations from Clerk
     invitations = get_clerk_organization_invitations(
         organization_id=org_id,
@@ -216,7 +209,6 @@ async def revoke_invitation(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="User is not part of an organization"
         )
-    """Revoke a pending invitation."""
     success = revoke_clerk_organization_invitation(
         organization_id=org_id,
         invitation_id=invitation_id

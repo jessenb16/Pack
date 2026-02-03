@@ -4,7 +4,6 @@ import requests
 from typing import Optional, Dict
 import logging
 from time import time
-from functools import lru_cache
 
 logger = logging.getLogger(__name__)
 

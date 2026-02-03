@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useUser, useAuth } from '@clerk/nextjs';
 import { useRouter } from 'next/navigation';
 import Navbar from '@/components/Navbar';
@@ -14,37 +14,20 @@ export default function AcceptInvitationPage() {
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
   const [message, setMessage] = useState('');
 
-  useEffect(() => {
-    if (!isLoaded) return;
-
-    // Clerk handles invitation acceptance, so if user is here and authenticated,
-    // they've already accepted the invitation
-    // We just need to sync them to MongoDB and redirect
-    if (user) {
-      handleInvitationAccepted();
-    } else {
-      // User not authenticated - redirect to login
-      router.push('/login');
-    }
-  }, [user, isLoaded]);
-
-  async function handleInvitationAccepted() {
+  const handleInvitationAccepted = useCallback(async () => {
     try {
       const token = await getToken();
       
       // Make an API call to trigger sync in get_current_user
-      // This will automatically sync the user and their organization to MongoDB
       const response = await apiClient.getFamily(token);
       
       if (response.data) {
-        // Successfully synced - redirect to dashboard
         setStatus('success');
         setMessage('Welcome to the family! Redirecting to dashboard...');
         setTimeout(() => {
           router.push('/dashboard');
         }, 2000);
       } else {
-        // Might need to wait a moment for sync
         await new Promise(resolve => setTimeout(resolve, 2000));
         const retryResponse = await apiClient.getFamily(token);
         
@@ -64,7 +47,19 @@ export default function AcceptInvitationPage() {
       setStatus('error');
       setMessage('An error occurred. Please try logging in again.');
     }
-  }
+  }, [getToken, router]);
+
+  useEffect(() => {
+    if (!isLoaded) return;
+
+    if (user) {
+      queueMicrotask(() => {
+        handleInvitationAccepted();
+      });
+    } else {
+      router.push('/login');
+    }
+  }, [user, isLoaded, handleInvitationAccepted, router]);
 
   if (!isLoaded || status === 'loading') {
     return (

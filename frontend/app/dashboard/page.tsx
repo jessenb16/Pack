@@ -5,21 +5,21 @@ import { useUser, useAuth, useOrganization } from '@clerk/nextjs';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Navbar from '@/components/Navbar';
-import DocumentViewer from '@/components/DocumentViewer';
+import DocumentViewer, { type DocumentViewerDocument } from '@/components/DocumentViewer';
 import { apiClient } from '@/lib/api';
 import { Calendar, Image as ImageIcon, Loader2, Mail, Users, ArrowRight } from 'lucide-react';
 
 export default function DashboardPage() {
   const { user, isLoaded } = useUser();
   const { getToken } = useAuth();
-  const { organization } = useOrganization();
+  const { organization: _organization } = useOrganization();
   const router = useRouter();
-  const [recentDocs, setRecentDocs] = useState<any[]>([]);
-  const [onThisDay, setOnThisDay] = useState<any[]>([]);
-  const [family, setFamily] = useState<any>(null);
-  const [members, setMembers] = useState<any[]>([]);
+  const [recentDocs, setRecentDocs] = useState<DocumentViewerDocument[]>([]);
+  const [onThisDay, setOnThisDay] = useState<DocumentViewerDocument[]>([]);
+  const [family, setFamily] = useState<Record<string, unknown> | null>(null);
+  const [members, setMembers] = useState<Record<string, unknown>[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedDoc, setSelectedDoc] = useState<any>(null);
+  const [selectedDoc, setSelectedDoc] = useState<DocumentViewerDocument | null>(null);
 
   useEffect(() => {
     if (!isLoaded) return;
@@ -69,12 +69,13 @@ export default function DashboardPage() {
       
       // Handle documents response
       if (documentsResponse.data) {
-        setRecentDocs(documentsResponse.data.slice(0, 20));
+        const docs = documentsResponse.data as DocumentViewerDocument[];
+        setRecentDocs(docs.slice(0, 20));
         
         // Get "On This Day" documents
         const today = new Date();
         const todayStr = `${today.getMonth() + 1}-${today.getDate()}`;
-        const onThisDayDocs = documentsResponse.data.filter((doc: any) => {
+        const onThisDayDocs = docs.filter((doc) => {
           const docDate = doc.metadata?.doc_date;
           if (!docDate) return false;
           const date = new Date(docDate);

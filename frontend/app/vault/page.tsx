@@ -4,7 +4,7 @@ import { Suspense, useEffect, useState } from 'react';
 import { useUser, useAuth } from '@clerk/nextjs';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Navbar from '@/components/Navbar';
-import DocumentViewer from '@/components/DocumentViewer';
+import DocumentViewer, { type DocumentViewerDocument } from '@/components/DocumentViewer';
 import { apiClient } from '@/lib/api';
 import { X, Loader2 } from 'lucide-react';
 
@@ -13,12 +13,12 @@ function VaultContent() {
   const { getToken } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [documents, setDocuments] = useState<any[]>([]);
+  const [documents, setDocuments] = useState<DocumentViewerDocument[]>([]);
   const [loading, setLoading] = useState(true);
   const [senders, setSenders] = useState<string[]>([]);
   const [eventTypes, setEventTypes] = useState<string[]>([]);
   const [years, setYears] = useState<number[]>([]);
-  const [selectedDoc, setSelectedDoc] = useState<any>(null);
+  const [selectedDoc, setSelectedDoc] = useState<DocumentViewerDocument | null>(null);
   
   const [filters, setFilters] = useState({
     sender: searchParams.get('sender') || '',
@@ -52,7 +52,7 @@ function VaultContent() {
       );
       
       if (response.data) {
-        setDocuments(response.data);
+        setDocuments(response.data as DocumentViewerDocument[]);
         
         // Only extract unique values for Smart Chips if we don't have them yet
         // (to avoid unnecessary processing on filter changes)
@@ -61,7 +61,7 @@ function VaultContent() {
           const uniqueEvents = new Set<string>();
           const uniqueYears = new Set<number>();
           
-          response.data.forEach((doc: any) => {
+          response.data.forEach((doc: DocumentViewerDocument) => {
             if (doc.metadata?.sender_name) uniqueSenders.add(doc.metadata.sender_name);
             if (doc.metadata?.event_type) uniqueEvents.add(doc.metadata.event_type);
             if (doc.metadata?.doc_date) {

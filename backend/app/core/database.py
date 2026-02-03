@@ -66,16 +66,6 @@ def _create_indexes(db: Database):
         logger.warning(f"Could not create indexes (may already exist): {e}")
 
 
-def get_family_filter(family_id: str) -> dict:
-    """
-    Returns a filter dictionary for family-specific queries.
-    
-    NOTE: This uses family_id (MongoDB _id). For new code, prefer get_org_filter()
-    which uses org_id directly from Clerk token.
-    """
-    return {"family_id": family_id}
-
-
 def get_org_filter(org_id: str) -> dict:
     """
     Returns a filter dictionary for organization-specific queries using org_id.

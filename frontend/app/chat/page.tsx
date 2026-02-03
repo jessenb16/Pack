@@ -10,7 +10,7 @@ import { Send, Loader2 } from 'lucide-react';
 interface Message {
   role: 'user' | 'assistant';
   content: string;
-  documents?: any[];
+  documents?: Record<string, unknown>[];
 }
 
 export default function ChatPage() {
@@ -106,7 +106,7 @@ export default function ChatPage() {
             {messages.length === 0 && (
               <div className="text-center text-gray-500">
                 <p className="mb-2 text-lg">Ask me anything about your family memories!</p>
-                <p className="text-sm">Try: "Show me birthday cards from Mom" or "What advice did Dad give?"</p>
+                <p className="text-sm">Try: &quot;Show me birthday cards from Mom&quot; or &quot;What advice did Dad give?&quot;</p>
               </div>
             )}
             
@@ -129,7 +129,7 @@ export default function ChatPage() {
                     <div className="mt-3 space-y-2">
                       <p className="text-xs font-semibold text-gray-600">Referenced Documents:</p>
                       <div className="grid grid-cols-2 gap-2">
-                        {message.documents.slice(0, 6).map((doc: any, idx: number) => {
+                        {message.documents.slice(0, 6).map((doc: Record<string, unknown>, idx: number) => {
                           // Debug: log each document
                           console.log(`Document ${idx}:`, doc);
                           

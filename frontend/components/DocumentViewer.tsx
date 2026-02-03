@@ -3,20 +3,23 @@
 import { X, ZoomIn, Download, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
+export interface DocumentViewerDocument {
+  id: string;
+  s3_original_url: string;
+  s3_thumbnail_url?: string;
+  metadata: {
+    sender_name: string;
+    event_type: string;
+    doc_date: string;
+    recipient_name?: string;
+  };
+  file_type: string;
+}
+
 interface DocumentViewerProps {
   isOpen: boolean;
   onClose: () => void;
-  document: {
-    id: string;
-    s3_original_url: string;
-    metadata: {
-      sender_name: string;
-      event_type: string;
-      doc_date: string;
-      recipient_name?: string;
-    };
-    file_type: string;
-  } | null;
+  document: DocumentViewerDocument | null;
   uploaderId?: string;
   currentUserId?: string;
   onDelete?: (documentId: string) => void;
@@ -41,10 +44,12 @@ export default function DocumentViewer({
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden';
+      queueMicrotask(() => {
+        setScale(1);
+        setShowDeleteConfirm(false);
+      });
     } else {
       document.body.style.overflow = 'unset';
-      setScale(1); // Reset zoom on close
-      setShowDeleteConfirm(false); // Reset delete confirmation on close
     }
     return () => {
       document.body.style.overflow = 'unset';

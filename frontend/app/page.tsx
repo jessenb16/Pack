@@ -16,7 +16,7 @@ export default async function Home() {
           Pack
         </h1>
         <p className="text-xl text-white/90 max-w-md">
-          Your family's digital memory archive. Preserve cards, letters, and photos with AI-powered search.
+          Your family&apos;s digital memory archive. Preserve cards, letters, and photos with AI-powered search.
         </p>
         <div className="flex gap-4 mt-4">
           <Link
