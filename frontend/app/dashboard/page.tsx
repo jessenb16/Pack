@@ -230,7 +230,7 @@ export default function DashboardPage() {
         {/* No Organization Message */}
         {!loading && !family && (
           <section className="mb-8 rounded-xl border border-amber-200 bg-gradient-to-r from-amber-50/80 to-orange-50/80 p-6 shadow-md">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-4">
                 <div className="rounded-full bg-amber-100 p-3">
                   <Users className="h-6 w-6 text-amber-700" />
@@ -256,7 +256,7 @@ export default function DashboardPage() {
         {/* Invite Family Members - Prominent Section */}
         {!loading && family && (
           <section className="mb-8 rounded-xl border border-blue-200 bg-gradient-to-r from-blue-50/80 to-indigo-50/80 p-6 shadow-md">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-4">
                 <div className="rounded-full bg-blue-100 p-3">
                   <Mail className="h-6 w-6 text-blue-700" />

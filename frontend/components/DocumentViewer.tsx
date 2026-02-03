@@ -91,15 +91,15 @@ export default function DocumentViewer({
 
       <div className="relative flex h-full w-full max-w-6xl flex-col rounded-lg bg-white shadow-2xl overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between border-b bg-gray-50 px-6 py-4">
-          <div>
-            <h2 className="text-xl font-bold text-gray-900">
+        <div className="flex flex-col gap-3 border-b bg-gray-50 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+          <div className="min-w-0">
+            <h2 className="truncate text-lg font-bold text-gray-900 sm:text-xl">
               {doc.metadata.sender_name}
               {doc.metadata.recipient_name && (
                 <span className="font-normal text-gray-600"> to {doc.metadata.recipient_name}</span>
               )}
             </h2>
-            <div className="flex gap-3 text-sm text-gray-600 mt-1">
+            <div className="mt-1 flex flex-wrap gap-2 text-sm text-gray-600 sm:gap-3">
               <span className="rounded-full bg-gray-200 px-2 py-0.5 text-xs font-medium text-gray-700">
                 {doc.metadata.event_type}
               </span>
@@ -107,7 +107,7 @@ export default function DocumentViewer({
             </div>
           </div>
           
-          <div className="flex gap-2">
+          <div className="flex flex-shrink-0 flex-wrap gap-2">
             {!isPdf && (
               <button 
                 onClick={() => setScale(scale > 1 ? 1 : 1.5)}
