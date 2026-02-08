@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Navbar from '@/components/Navbar';
 import DocumentViewer, { type DocumentViewerDocument } from '@/components/DocumentViewer';
 import { apiClient } from '@/lib/api';
+import { formatDocDate, parseLocalDate } from '@/lib/date';
 import { X, Loader2 } from 'lucide-react';
 
 function VaultContent() {
@@ -66,8 +67,8 @@ function VaultContent() {
             if (doc.metadata?.sender_name) uniqueSenders.add(doc.metadata.sender_name);
             if (doc.metadata?.event_type) uniqueEvents.add(doc.metadata.event_type);
             if (doc.metadata?.doc_date) {
-              const year = new Date(doc.metadata.doc_date).getFullYear();
-              uniqueYears.add(year);
+              const date = parseLocalDate(doc.metadata.doc_date);
+              if (date) uniqueYears.add(date.getFullYear());
             }
           });
 
@@ -272,7 +273,7 @@ function VaultContent() {
                     </p>
                     <p className="text-xs text-gray-600">{doc.metadata?.event_type}</p>
                     <p className="text-xs text-gray-500 mt-1">
-                      {new Date(doc.metadata?.doc_date).toLocaleDateString()}
+                      {formatDocDate(doc.metadata?.doc_date ?? '')}
                     </p>
                   </div>
                 </div>
