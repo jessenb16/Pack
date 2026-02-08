@@ -7,6 +7,7 @@ import Link from 'next/link';
 import Navbar from '@/components/Navbar';
 import DocumentViewer, { type DocumentViewerDocument } from '@/components/DocumentViewer';
 import { apiClient } from '@/lib/api';
+import { parseLocalDate } from '@/lib/date';
 import { Calendar, Image as ImageIcon, Loader2, Mail, Users, ArrowRight } from 'lucide-react';
 
 export default function DashboardPage() {
@@ -109,7 +110,8 @@ export default function DashboardPage() {
         const onThisDayDocs = docs.filter((doc) => {
           const docDate = doc.metadata?.doc_date;
           if (!docDate) return false;
-          const date = new Date(docDate);
+          const date = parseLocalDate(docDate);
+          if (!date) return false;
           const dateStr = `${date.getMonth() + 1}-${date.getDate()}`;
           return dateStr === todayStr;
         });

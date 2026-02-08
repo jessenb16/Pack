@@ -1,6 +1,7 @@
 'use client';
 
 import { X, ZoomIn, Download, Trash2 } from 'lucide-react';
+import { formatDocDate } from '@/lib/date';
 import { useCallback, useEffect, useState } from 'react';
 
 export interface DocumentViewerDocument {
@@ -126,7 +127,7 @@ export default function DocumentViewer({
                   {doc.metadata.event_type}
                 </span>
                 <span>
-                  {new Date(doc.metadata.doc_date).toLocaleDateString()}
+                  {formatDocDate(doc.metadata.doc_date)}
                 </span>
               </div>
             </div>
