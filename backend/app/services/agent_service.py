@@ -15,29 +15,36 @@ from app.core.config import settings
 from app.core.database import get_database
 from app.services.document_processor import create_embedding
 from app.services.storage import get_signed_url, extract_s3_key_from_url
+from app.services.query_utils import (
+    resolve_event_type,
+    resolve_sender,
+    event_type_query_value,
+    sender_query_value,
+)
 
 logger = logging.getLogger(__name__)
 
 # SYSTEM PROMPT
 # Pack helps users find family memories; default to using tools—only decline when obviously off-topic.
-system_prompt = """You are Pack, a warm and helpful family archivist. You help users find and understand their family memories in the archive.
+system_prompt = """You are Pack, a family archivist. Help users find memories in the archive.
 
-DEFAULT BEHAVIOR: Use your tools. When in doubt, search or fetch—don't refuse. Most questions (even vague ones like "anything from Mom?" or "what do you have?") are about the archive. Run the tools first; if nothing comes back, then say you didn't find anything.
+CORE DIRECTIVE:
+ALWAYS run a tool first. Do not ask clarifying questions or reply with offers like "let me know what you'd like to explore" without having searched. If the user asks "anything from Mom?", run fetch_documents. If they ask "What did Mom say?", run search_memory_contents.
 
-CRITICAL: Do NOT reply with a generic offer like "let me know what you'd like to explore" or "if you have any specific documents, please let me know" without having run a tool first. If the user asked a question (e.g. "What do Vicky and Ryan like to do with Fiona?"), you MUST call search_memory_contents with a query that includes the names and topic (e.g. "Vicky Ryan Fiona activities things they like to do"), then answer from the results. Never respond to a real question by asking them to be more specific—search first, then answer or say you found nothing.
+TOOL ROUTING:
+1. 'fetch_documents': LISTS/FILTERS (e.g., "Show me photos from 2023", "Birthday cards from Dad").
+2. 'search_memory_contents': ANSWERS/CONTENTS (e.g., "What did Vicky say?", "Who is Maxxy?").
+    - CRITICAL: Put ALL names and topics in the 'query' string (e.g., "Maxxy Geordy relationship activities things they like to do together").
 
-WHEN TO DECLINE: Only if the question is obviously not about the archive (e.g. "what's 2+2?", "write Python code", "what's the weather in Tokyo?"). Do NOT decline just because the question is short, casual, or ambiguous—try the tools.
+CONSTRAINTS:
+- Only describe what the tools return. No invented details.
+- No Markdown images or URLs. The UI handles that.
+- If tools return nothing, say so and suggest broader terms.
+- Refuse only queries unrelated to the archive (e.g., "coding help").
 
-RULES:
-- NEVER make up content. Only describe what the tools actually returned.
-- NEVER include URLs, image links, or markdown images. The app shows thumbnails from tool results; just describe what you found (e.g. "I found a birthday card from Mom").
-- If tools return no results, say you couldn't find anything and suggest different words or filters. Be encouraging.
-
-TOOL USAGE:
-- List/filter by person, event type, or year ("show me from Mom", "birthday cards", "2023") → use 'fetch_documents'.
-- Questions about people or what's in documents ("What did Mom say?", "What do Vicky and Ryan like to do with Fiona?", "anything about graduation?") → use 'search_memory_contents' with a query that includes the names and topic. Example: for "What do Vicky and Ryan like to do with Fiona?" use query like "Vicky Ryan Fiona activities things they like to do together".
-- Use search_memory_contents once per question with one clear query. Don't run multiple similar searches.
-- Read the 'content' field from results and mention sender, event type, and date when you describe documents.
+METADATA HANDLING:
+- Ignore media words: "Birthday card" -> Event: "Birthday".
+- Use the exact sender/event names provided in context when possible.
 """
 
 # 1. Initialize the Model
@@ -69,16 +76,29 @@ async def fetch_documents(
     # Note: It lives inside 'configurable', not at the top level
     org_id = config["configurable"].get("org_id")
     if not org_id:
-        return [{"error": "Security violation: No Organization ID found."}]
+        return ("Security violation: No Organization ID found.", [])
 
-    # Build Query
+    # Load org settings for canonical event types and sender names
+    db = await get_database()
+    org_settings_doc = await db.org_settings.find_one({"_id": org_id})
+    org_settings = org_settings_doc or {}
+    org_event_types = org_settings.get("event_types", [])
+    org_sender_names = org_settings.get("sender_names", [])
+
+    # Build Query - use case-insensitive matching and normalize event type
+    # ("birthday card" and "birthday documents" both map to "Birthday")
     query = {"org_id": org_id}
-    
-    # We use $eq for strict matching on tags
+
     if sender:
-        query["metadata.sender_name"] = sender
+        resolved_sender = resolve_sender(sender, org_sender_names) or sender.strip()
+        qv = sender_query_value(resolved_sender)
+        if qv is not None:
+            query["metadata.sender_name"] = qv
     if event_type:
-        query["metadata.event_type"] = event_type
+        resolved_event = resolve_event_type(event_type, org_event_types) or event_type.strip()
+        qv = event_type_query_value(resolved_event)
+        if qv is not None:
+            query["metadata.event_type"] = qv
     if year:
         # doc_date is stored as ISO date string "YYYY-MM-DD"
         # Compare as strings in YYYY-MM-DD format
@@ -88,11 +108,12 @@ async def fetch_documents(
             "$gte": start_date,
             "$lt": end_date
         }
-    if receiver:
-        query["metadata.recipient_name"] = receiver
+    if receiver and receiver.strip():
+        rv = sender_query_value(receiver.strip())
+        if rv is not None:
+            query["metadata.recipient_name"] = rv
 
     # Execute (Async with Motor)
-    db = await get_database()
     cursor = db.documents.find(query).limit(10)
     documents = await cursor.to_list(length=10)
 
@@ -142,6 +163,13 @@ async def search_memory_contents(
     if not org_id:
         return ("Error: No organization context.", [])
 
+    # Load org settings for canonical event types and sender names
+    db = await get_database()
+    org_settings_doc = await db.org_settings.find_one({"_id": org_id})
+    org_settings = org_settings_doc or {}
+    org_event_types = org_settings.get("event_types", [])
+    org_sender_names = org_settings.get("sender_names", [])
+
     query_vector = create_embedding(query)
     if not query_vector:
         return ("Failed to generate embedding for query.", [])
@@ -149,11 +177,27 @@ async def search_memory_contents(
     filter_doc = {"org_id": {"$eq": org_id}}
     post_filter = {}
     if sender:
-        post_filter["metadata.sender_name"] = sender
+        resolved_sender = resolve_sender(sender, org_sender_names) or sender.strip()
+        qv = sender_query_value(resolved_sender)
+        if qv is not None:
+            post_filter["metadata.sender_name"] = qv
     if event_type:
-        post_filter["metadata.event_type"] = event_type
-    if receiver:
-        post_filter["metadata.recipient_name"] = receiver
+        resolved_event = resolve_event_type(event_type, org_event_types) or event_type.strip()
+        qv = event_type_query_value(resolved_event)
+        if qv is not None:
+            post_filter["metadata.event_type"] = qv
+    if receiver and receiver.strip():
+        rv = sender_query_value(receiver.strip())
+        if rv is not None:
+            post_filter["metadata.recipient_name"] = rv
+    if year:
+        start_date = f"{year}-01-01"
+        end_date = f"{year + 1}-01-01"
+        post_filter["metadata.doc_date"] = {
+            "$gte": start_date,
+            "$lt": end_date
+        }
+
 
     pipeline = [
         {
@@ -178,7 +222,6 @@ async def search_memory_contents(
         {"$limit": 5}
     ]
 
-    db = await get_database()
     try:
         results = await db.documents.aggregate(pipeline).to_list(length=5)
     except Exception as e:
@@ -301,24 +344,51 @@ async def execute_agent_query(
         existing_state = await agent_executor.aget_state(config)
         existing_messages = existing_state.values.get("messages", [])
         
-        # Check if system message already exists in history
-        has_system_message = any(
-            isinstance(msg, SystemMessage) and msg.content == system_prompt 
-            for msg in existing_messages
-        )
+        # Check if any system message exists (content may include dynamic org context)
+        has_system_message = any(isinstance(msg, SystemMessage) for msg in existing_messages)
         
         if has_system_message:
             # System message already in history - just send user message
             inputs = {"messages": [HumanMessage(content=user_message)]}
             logger.debug("System message found in history - not adding duplicate")
         else:
-            # First message in conversation - add system message
-            inputs = {"messages": [SystemMessage(content=system_prompt), HumanMessage(content=user_message)]}
-            logger.debug("First message - adding system prompt")
+            # First message - add system message with org-specific context
+            prompt = system_prompt
+            try:
+                db = await get_database()
+                org_settings_doc = await db.org_settings.find_one({"_id": org_id})
+                org_settings = org_settings_doc or {}
+                event_types = org_settings.get("event_types", [])
+                sender_names = org_settings.get("sender_names", [])
+                if event_types or sender_names:
+                    prompt += "\n\nAVAILABLE FILTERS (use these values for fetch_documents when relevant):"
+                    if event_types:
+                        prompt += f"\n- Event types: {', '.join(event_types)}"
+                    if sender_names:
+                        prompt += f"\n- Senders: {', '.join(sender_names)}"
+            except Exception as e:
+                logger.debug(f"Could not load org settings for prompt: {e}")
+            inputs = {"messages": [SystemMessage(content=prompt), HumanMessage(content=user_message)]}
+            logger.debug("First message - adding system prompt with org context")
     except Exception as e:
         # If we can't get state (new conversation), add system message
         logger.debug(f"Could not get existing state (likely new conversation): {e}")
-        inputs = {"messages": [SystemMessage(content=system_prompt), HumanMessage(content=user_message)]}
+        prompt = system_prompt
+        try:
+            db = await get_database()
+            org_settings_doc = await db.org_settings.find_one({"_id": org_id})
+            org_settings = org_settings_doc or {}
+            event_types = org_settings.get("event_types", [])
+            sender_names = org_settings.get("sender_names", [])
+            if event_types or sender_names:
+                prompt += "\n\nAVAILABLE FILTERS (use these values for fetch_documents when relevant):"
+                if event_types:
+                    prompt += f"\n- Event types: {', '.join(event_types)}"
+                if sender_names:
+                    prompt += f"\n- Senders: {', '.join(sender_names)}"
+        except Exception as inner_e:
+            logger.debug(f"Could not load org settings for prompt: {inner_e}")
+        inputs = {"messages": [SystemMessage(content=prompt), HumanMessage(content=user_message)]}
     
     # Execute agent (non-streaming)
     try:
