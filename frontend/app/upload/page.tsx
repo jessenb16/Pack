@@ -153,10 +153,10 @@ export default function UploadPage() {
             )}
           </div>
 
-          {/* Sender */}
+          {/* Sender/Poster */}
           <div>
             <label className="mb-2 block text-sm font-medium text-gray-700">
-              Sender
+              Sender/Poster
             </label>
             <select
               value={formData.sender_name}
@@ -164,7 +164,7 @@ export default function UploadPage() {
               className="w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-red-900 focus:outline-none focus:ring-2 focus:ring-red-900"
               required
             >
-              <option value="">Select sender...</option>
+              <option value="">Select sender/poster...</option>
               {members.map((member) => (
                 <option key={member.id} value={member.name}>
                   {member.name}
