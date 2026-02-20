@@ -142,6 +142,8 @@ export default function ChatPage() {
                           }
                           
                           const summary = typeof doc.summary === 'string' ? doc.summary : '';
+                          // Remove in the future - this is for testing threshold score
+                          const score = typeof doc.score === 'number' ? doc.score : undefined;
                           return (
                             <a
                               key={`doc-${idx}`}
@@ -160,6 +162,12 @@ export default function ChatPage() {
                                   (e.target as HTMLImageElement).style.display = 'none';
                                 }}
                               />
+                              {/* Remove in the future - this is for testing threshold score */}
+                              {typeof score === 'number' ? (
+                                <div className="absolute right-1 top-1 rounded bg-black/70 px-1.5 py-0.5 text-[10px] text-white">
+                                  {score.toFixed(3)}
+                                </div>
+                              ) : null}
                               {summary ? (
                                 <div className="absolute bottom-0 left-0 right-0 bg-black/60 p-1 text-xs text-white opacity-0 transition-opacity group-hover:opacity-100">
                                   <p className="truncate">{summary}</p>
