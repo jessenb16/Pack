@@ -14,6 +14,7 @@ export interface DocumentViewerDocument {
     event_type: string;
     doc_date: string;
     recipient_name?: string;
+    caption?: string;
   };
   file_type: string;
 }
@@ -132,6 +133,9 @@ export default function DocumentViewer({
                   {formatDocDate(doc.metadata.doc_date)}
                 </span>
               </div>
+              {doc.metadata.caption && (
+                <p className="mt-2 text-sm text-gray-700">{doc.metadata.caption}</p>
+              )}
             </div>
             {/* Close button - inside header, always visible, prominent on mobile */}
             <button

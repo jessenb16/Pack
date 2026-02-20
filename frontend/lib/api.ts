@@ -101,15 +101,18 @@ class ApiClient {
     event_type: string;
     recipient_name?: string;
     doc_date: string;
+    caption: string;
   }, token?: string | null) {
+    // Append form fields first, then file - some multipart parsers have issues when file is first
     const formData = new FormData();
-    formData.append('file', file);
     formData.append('sender_name', metadata.sender_name);
     formData.append('event_type', metadata.event_type);
     formData.append('doc_date', metadata.doc_date);
+    formData.append('caption', metadata.caption);
     if (metadata.recipient_name) {
       formData.append('recipient_name', metadata.recipient_name);
     }
+    formData.append('file', file);
 
     const url = `${this.baseUrl}/api/documents/upload`;
     const headers: HeadersInit = {};

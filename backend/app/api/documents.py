@@ -88,7 +88,8 @@ async def get_documents(
                 "sender_name": doc["metadata"]["sender_name"],
                 "event_type": doc["metadata"]["event_type"],
                 "doc_date": doc["metadata"]["doc_date"],
-                "recipient_name": doc["metadata"].get("recipient_name")
+                "recipient_name": doc["metadata"].get("recipient_name"),
+                "caption": doc["metadata"].get("caption")
             },
             file_type=assets.get("file_type") or doc.get("file_type", ""),
             s3_original_url=original_signed_url,
@@ -145,7 +146,8 @@ async def get_document(
             "sender_name": doc["metadata"]["sender_name"],
             "event_type": doc["metadata"]["event_type"],
             "doc_date": doc["metadata"]["doc_date"],
-            "recipient_name": doc["metadata"].get("recipient_name")
+            "recipient_name": doc["metadata"].get("recipient_name"),
+            "caption": doc["metadata"].get("caption")
         },
         file_type=assets.get("file_type") or doc.get("file_type", ""),
         s3_original_url=original_signed_url,
@@ -156,11 +158,12 @@ async def get_document(
 
 @router.post("/upload", response_model=DocumentResponse, status_code=status.HTTP_201_CREATED)
 async def upload_document(
-    file: UploadFile = File(...),
     sender_name: str = Form(...),
     event_type: str = Form(...),
     doc_date: str = Form(...),
+    caption: str = Form(...),
     recipient_name: Optional[str] = Form(None),
+    file: UploadFile = File(...),
     current_user: dict = Depends(get_current_user_light),
     org_id: str = Depends(get_org_id_light),
     db: Database = Depends(get_db)
@@ -185,9 +188,15 @@ async def upload_document(
     
     filename = secure_filename(file.filename)
     
+    if not caption or not caption.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Caption is required. Please describe your document in one or two sentences."
+        )
+    
     try:
         # Process document (thumbnail, extraction, embedding)
-        processed = process_document(file_data, filename)
+        processed = process_document(file_data, filename, caption=caption.strip())
         
         # Upload to S3 (returns S3 keys, not URLs)
         s3_original_key = upload_to_s3(file_data, org_id, filename, is_thumbnail=False)
@@ -207,7 +216,8 @@ async def upload_document(
                 "sender_name": sender_name,
                 "event_type": event_type,
                 "doc_date": doc_date,
-                "recipient_name": recipient_name
+                "recipient_name": recipient_name,
+                "caption": caption.strip()
             },
             "assets": {
                 "file_type": file.content_type or f"application/{filename.split('.')[-1]}",
@@ -242,7 +252,8 @@ async def upload_document(
                 "sender_name": document["metadata"]["sender_name"],
                 "event_type": document["metadata"]["event_type"],
                 "doc_date": document["metadata"]["doc_date"],
-                "recipient_name": document["metadata"].get("recipient_name")
+                "recipient_name": document["metadata"].get("recipient_name"),
+                "caption": document["metadata"].get("caption")
             },
             file_type=document["assets"]["file_type"],
             s3_original_url=original_signed_url,

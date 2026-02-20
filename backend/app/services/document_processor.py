@@ -1,5 +1,6 @@
 """Document processing pipeline for FastAPI."""
 import io
+import re
 from PIL import Image
 from pypdf import PdfReader
 from pdf2image import convert_from_bytes
@@ -64,6 +65,8 @@ def extract_text_from_pdf(file_data: bytes) -> str:
         text = ""
         for page in reader.pages:
             text += page.extract_text() + "\n"
+        # Normalize whitespace - pypdf often produces "word \n\n word \n\n word" for complex layouts
+        text = re.sub(r"\s+", " ", text.strip())
         return text.strip()
     except Exception as e:
         logger.error(f"Error extracting text from PDF: {e}")
@@ -125,15 +128,16 @@ def create_embedding(text: str) -> list:
         return []
 
 
-def process_document(file_data: bytes, filename: str) -> dict:
-    """Process document: generate thumbnail, extract content, create embedding."""
+def process_document(file_data: bytes, filename: str, caption: str = "") -> dict:
+    """Process document: generate thumbnail, extract content, create embedding.
+    Caption is prepended to text_content for better agent/embedding context."""
     try:
         ext = filename.lower().split('.')[-1]
         
         # Generate thumbnail
         thumbnail_data, thumbnail_filename = generate_thumbnail(file_data, filename)
         
-        # Extract text content
+        # Extract text content (vision/PDF extraction)
         text_content = None
         if ext == 'pdf':
             # Try PDF extraction first
@@ -155,6 +159,11 @@ def process_document(file_data: bytes, filename: str) -> dict:
             import base64
             img_base64 = base64.b64encode(file_data).decode('utf-8')
             text_content = extract_text_from_image(img_base64, filename)
+        
+        # Prepend user caption to text_content for agent/embedding context
+        if caption and caption.strip():
+            vision_part = (text_content or "").strip()
+            text_content = f"{caption.strip()}\n\n{vision_part}" if vision_part else caption.strip()
         
         # Generate embedding
         embedding = create_embedding(text_content or "")
