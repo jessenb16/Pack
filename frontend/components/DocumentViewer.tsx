@@ -1,6 +1,6 @@
 'use client';
 
-import { X, ZoomIn, Download, Trash2 } from 'lucide-react';
+import { X, ZoomIn, Download, Trash2, Loader2 } from 'lucide-react';
 import { formatDocDate } from '@/lib/date';
 import { useCallback, useEffect, useState } from 'react';
 
@@ -14,6 +14,7 @@ export interface DocumentViewerDocument {
     event_type: string;
     doc_date: string;
     recipient_name?: string;
+    caption?: string;
   };
   file_type: string;
 }
@@ -38,6 +39,7 @@ export default function DocumentViewer({
   const [scale, setScale] = useState(1);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [contentLoaded, setContentLoaded] = useState(false);
 
   const canDelete = Boolean(
     uploaderId &&
@@ -58,6 +60,7 @@ export default function DocumentViewer({
       document.body.style.overflow = 'hidden';
       window.addEventListener('keydown', handleEscape);
       queueMicrotask(() => {
+        setContentLoaded(false);
         setScale(1);
         setShowDeleteConfirm(false);
       });
@@ -66,7 +69,7 @@ export default function DocumentViewer({
       document.body.style.overflow = 'unset';
       window.removeEventListener('keydown', handleEscape);
     };
-  }, [isOpen, handleEscape]);
+  }, [isOpen, handleEscape, doc?.id]);
 
   const handleDelete = async () => {
     if (!doc || !onDelete) return;
@@ -130,6 +133,9 @@ export default function DocumentViewer({
                   {formatDocDate(doc.metadata.doc_date)}
                 </span>
               </div>
+              {doc.metadata.caption && (
+                <p className="mt-2 text-sm text-gray-700">{doc.metadata.caption}</p>
+              )}
             </div>
             {/* Close button - inside header, always visible, prominent on mobile */}
             <button
@@ -186,26 +192,66 @@ export default function DocumentViewer({
         </div>
 
         {/* Content - scrollable */}
-        <div className="min-h-0 flex-1 overflow-auto bg-gray-100 p-4">
+        <div className="relative min-h-0 flex-1 overflow-auto bg-gray-100 p-4">
           {isPdf ? (
-            <iframe
-              src={doc.s3_original_url}
-              className="h-full min-h-[60vh] w-full rounded shadow-sm bg-white"
-              title="PDF Viewer"
-            />
-          ) : (
-            <div
-              className={`flex items-center justify-center ${scale > 1 ? 'cursor-zoom-out' : 'cursor-zoom-in'}`}
-              onClick={() => setScale(scale > 1 ? 1 : 1.5)}
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
+            <>
+              {/* Thumbnail placeholder - instant feedback while PDF loads */}
+              {!contentLoaded && doc.s3_thumbnail_url && (
+                <div className="flex min-h-[60vh] items-center justify-center">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={doc.s3_thumbnail_url}
+                    alt="Loading preview"
+                    className="max-h-[60vh] max-w-full object-contain rounded shadow-md opacity-80"
+                  />
+                </div>
+              )}
+              <iframe
                 src={doc.s3_original_url}
-                alt="Document"
-                className="max-h-[70vh] max-w-full w-auto object-contain rounded shadow-md"
-                style={{ transform: `scale(${scale})` }}
+                className={`h-full min-h-[60vh] w-full rounded shadow-sm bg-white ${contentLoaded ? 'block' : 'absolute inset-0 opacity-0'}`}
+                title="PDF Viewer"
+                onLoad={() => setContentLoaded(true)}
               />
-            </div>
+              {!contentLoaded && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-white/70">
+                  <Loader2 className="h-10 w-10 animate-spin text-gray-600" aria-hidden />
+                  <p className="text-sm font-medium text-gray-600">Loading document…</p>
+                </div>
+              )}
+            </>
+          ) : (
+            <>
+              {/* Thumbnail placeholder - instant feedback while full image loads */}
+              {!contentLoaded && doc.s3_thumbnail_url && (
+                <div className="flex min-h-[50vh] items-center justify-center">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={doc.s3_thumbnail_url}
+                    alt="Loading preview"
+                    className="max-h-[60vh] max-w-full object-contain rounded shadow-md opacity-80"
+                  />
+                </div>
+              )}
+              <div
+                className={`flex items-center justify-center ${contentLoaded ? '' : 'absolute inset-0 opacity-0'} ${scale > 1 ? 'cursor-zoom-out' : 'cursor-zoom-in'}`}
+                onClick={() => setScale(scale > 1 ? 1 : 1.5)}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={doc.s3_original_url}
+                  alt="Document"
+                  className="max-h-[70vh] max-w-full w-auto object-contain rounded shadow-md"
+                  style={{ transform: `scale(${scale})` }}
+                  onLoad={() => setContentLoaded(true)}
+                />
+              </div>
+              {!contentLoaded && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-white/70">
+                  <Loader2 className="h-10 w-10 animate-spin text-gray-600" aria-hidden />
+                  <p className="text-sm font-medium text-gray-600">Loading full size…</p>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>

@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
 
     # Vector search (search_memory_contents): min similarity score to include a doc (0–1)
-    VECTOR_SEARCH_SCORE_THRESHOLD: float = float(os.getenv("VECTOR_SEARCH_SCORE_THRESHOLD", "0.6"))
+    VECTOR_SEARCH_SCORE_THRESHOLD: float = float(os.getenv("VECTOR_SEARCH_SCORE_THRESHOLD", "0.0"))
     
     # Clerk Authentication
     CLERK_SECRET_KEY: str = os.getenv("CLERK_SECRET_KEY", "")

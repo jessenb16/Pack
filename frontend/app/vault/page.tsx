@@ -159,7 +159,7 @@ function VaultContent() {
         {/* Smart Chips Filter */}
         <div className="mb-8 rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
           <div className="mb-4">
-            <h2 className="mb-2 text-lg font-semibold text-gray-700">Filter by Sender</h2>
+            <h2 className="mb-2 text-lg font-semibold text-gray-700">Filter by Sender/Poster</h2>
             <div className="flex flex-wrap gap-2">
               {senders.map((sender) => (
                 <button
@@ -264,12 +264,14 @@ function VaultContent() {
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={doc.s3_thumbnail_url}
-                    alt={doc.metadata?.sender_name || 'Document'}
+                    alt={doc.metadata?.recipient_name ? `${doc.metadata.sender_name} to ${doc.metadata.recipient_name}` : doc.metadata?.sender_name || 'Document'}
                     className="h-48 w-full object-cover transition-transform group-hover:scale-105"
                   />
                   <div className="p-3">
                     <p className="text-sm font-medium text-gray-900">
-                      {doc.metadata?.sender_name}
+                      {doc.metadata?.recipient_name
+                        ? `${doc.metadata.sender_name} to ${doc.metadata.recipient_name}`
+                        : doc.metadata?.sender_name}
                     </p>
                     <p className="text-xs text-gray-600">{doc.metadata?.event_type}</p>
                     <p className="text-xs text-gray-500 mt-1">

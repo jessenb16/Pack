@@ -55,6 +55,7 @@ export default function Navbar() {
   // Focus trap and restore focus on close
   useEffect(() => {
     if (mobileMenuOpen && menuRef.current) {
+      const menuButtonEl = menuButtonRef.current;
       const focusables = menuRef.current.querySelectorAll<HTMLElement>(
         'a[href], button:not([disabled])'
       );
@@ -75,7 +76,7 @@ export default function Navbar() {
       document.addEventListener('keydown', handleKeyDown);
       return () => {
         document.removeEventListener('keydown', handleKeyDown);
-        menuButtonRef.current?.focus();
+        menuButtonEl?.focus();
       };
     }
   }, [mobileMenuOpen]);

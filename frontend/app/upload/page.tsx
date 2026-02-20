@@ -18,6 +18,7 @@ export default function UploadPage() {
     event_type: '',
     recipient_name: '',
     doc_date: new Date().toISOString().split('T')[0],
+    caption: '',
   });
   const [useCustomEventType, setUseCustomEventType] = useState(false);
   const [members, setMembers] = useState<Array<{id: string; name: string; role: string}>>([]);
@@ -67,7 +68,7 @@ export default function UploadPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!file || !formData.sender_name || !formData.event_type || !formData.doc_date) {
+    if (!file || !formData.sender_name || !formData.event_type || !formData.doc_date || !formData.caption?.trim()) {
       alert('Please fill in all required fields and select a file');
       return;
     }
@@ -81,7 +82,8 @@ export default function UploadPage() {
           sender_name: formData.sender_name,
           event_type: formData.event_type,
           recipient_name: formData.recipient_name || undefined,
-          doc_date: formData.doc_date
+          doc_date: formData.doc_date,
+          caption: formData.caption.trim()
         }, 
         token
       );
@@ -153,10 +155,10 @@ export default function UploadPage() {
             )}
           </div>
 
-          {/* Sender */}
+          {/* Sender/Poster */}
           <div>
             <label className="mb-2 block text-sm font-medium text-gray-700">
-              Sender
+              Sender/Poster
             </label>
             <select
               value={formData.sender_name}
@@ -164,7 +166,7 @@ export default function UploadPage() {
               className="w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-red-900 focus:outline-none focus:ring-2 focus:ring-red-900"
               required
             >
-              <option value="">Select sender...</option>
+              <option value="">Select sender/poster...</option>
               {members.map((member) => (
                 <option key={member.id} value={member.name}>
                   {member.name}
@@ -229,6 +231,21 @@ export default function UploadPage() {
             )}
           </div>
 
+          {/* Caption (Required) */}
+          <div>
+            <label className="mb-2 block text-sm font-medium text-gray-700">
+              Caption <span className="text-red-600">*</span>
+            </label>
+            <textarea
+              placeholder="Describe your document in one or two sentences. This helps the family find it later."
+              value={formData.caption}
+              onChange={(e) => setFormData({ ...formData, caption: e.target.value })}
+              className="w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-red-900 focus:outline-none focus:ring-2 focus:ring-red-900 min-h-[80px] resize-y"
+              required
+              rows={3}
+            />
+          </div>
+
           {/* Recipient (Optional) */}
           <div>
             <label className="mb-2 block text-sm font-medium text-gray-700">
@@ -243,10 +260,10 @@ export default function UploadPage() {
             />
           </div>
 
-          {/* Date */}
+          {/* Date of document */}
           <div>
             <label className="mb-2 block text-sm font-medium text-gray-700">
-              Date
+              Date of document
             </label>
             <input
               type="date"
@@ -260,7 +277,7 @@ export default function UploadPage() {
           {/* Submit Button */}
           <button
             type="submit"
-            disabled={uploading || !file}
+            disabled={uploading || !file || !formData.caption?.trim()}
             className="w-full rounded-lg bg-purple-600 px-6 py-3 text-white transition-colors hover:bg-purple-700 disabled:bg-gray-400 shadow-sm"
           >
             {uploading ? (
