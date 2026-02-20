@@ -243,10 +243,10 @@ export default function UploadPage() {
             />
           </div>
 
-          {/* Date */}
+          {/* Date of document */}
           <div>
             <label className="mb-2 block text-sm font-medium text-gray-700">
-              Date
+              Date of document
             </label>
             <input
               type="date"
