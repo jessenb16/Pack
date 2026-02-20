@@ -59,8 +59,8 @@ export default function DocumentViewer({
     if (isOpen) {
       document.body.style.overflow = 'hidden';
       window.addEventListener('keydown', handleEscape);
-      setContentLoaded(false);
       queueMicrotask(() => {
+        setContentLoaded(false);
         setScale(1);
         setShowDeleteConfirm(false);
       });
