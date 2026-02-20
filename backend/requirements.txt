@@ -24,6 +24,7 @@ langgraph-checkpoint-mongodb>=0.0.1  # MongoDB checkpointer for LangGraph
 
 # Document Processing
 pypdf>=3.17.0
+fpdf2>=2.7.0
 Pillow>=10.0.0
 pdf2image>=1.16.0
 

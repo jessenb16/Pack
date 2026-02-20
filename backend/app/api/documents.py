@@ -1,7 +1,7 @@
 """Documents API endpoints."""
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
 from bson import ObjectId
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, List
 from werkzeug.utils import secure_filename
 
@@ -9,7 +9,7 @@ from app.core.database import get_db, get_org_filter
 from app.api.auth import get_current_user_light, get_org_id_light
 from app.models.document import DocumentResponse, DocumentFilter, DocumentCreate
 from app.services.storage import upload_to_s3, delete_from_s3, get_signed_url, extract_s3_key_from_url
-from app.services.document_processor import process_document
+from app.services.document_processor import process_document, text_to_pdf, _sanitize_filename
 from app.core.config import settings
 from pymongo.database import Database
 import logging
@@ -94,7 +94,7 @@ async def get_documents(
             file_type=assets.get("file_type") or doc.get("file_type", ""),
             s3_original_url=original_signed_url,
             s3_thumbnail_url=thumbnail_signed_url,
-            created_at=doc.get("created_at", datetime.utcnow())
+            created_at=doc.get("created_at", datetime.now(timezone.utc))
         ))
     
     return result
@@ -152,7 +152,7 @@ async def get_document(
         file_type=assets.get("file_type") or doc.get("file_type", ""),
         s3_original_url=original_signed_url,
         s3_thumbnail_url=thumbnail_signed_url,
-        created_at=doc.get("created_at", datetime.utcnow())
+        created_at=doc.get("created_at", datetime.now(timezone.utc))
     )
 
 
@@ -163,30 +163,56 @@ async def upload_document(
     doc_date: str = Form(...),
     caption: str = Form(...),
     recipient_name: Optional[str] = Form(None),
-    file: UploadFile = File(...),
+    custom_filename: Optional[str] = Form(None),
+    text: Optional[str] = Form(None),
+    file: Optional[UploadFile] = File(None),
     current_user: dict = Depends(get_current_user_light),
     org_id: str = Depends(get_org_id_light),
     db: Database = Depends(get_db)
 ):
-    """Upload a new document."""
+    """Upload a new document. Accepts either a file (image/PDF) or plain text (generates PDF)."""
     
-    # Validate file
-    if not allowed_file(file.filename):
+    # Determine source: file or text
+    file_data = None
+    filename = None
+    content_type = "application/pdf"
+
+    if file and file.filename and file.filename not in ("", "undefined"):
+        # File upload
+        if not allowed_file(file.filename):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"File type not allowed. Allowed types: {', '.join(settings.ALLOWED_EXTENSIONS)}"
+            )
+        file_data = await file.read()
+        if len(file_data) == 0:
+            file_data = None
+        else:
+            filename = secure_filename(file.filename)
+            content_type = file.content_type or f"application/{filename.rsplit('.', 1)[-1]}"
+
+    if file_data is None and text and text.strip():
+        # Text upload - generate PDF
+        filename_base = "text_upload"
+        if custom_filename and custom_filename.strip():
+            sanitized = _sanitize_filename(custom_filename.strip())
+            if sanitized:
+                filename_base = sanitized.rsplit(".", 1)[0]
+        else:
+            filename_base = f"text_upload_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
+        file_data, filename = text_to_pdf(text.strip(), filename_base)
+
+    if file_data is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"File type not allowed. Allowed types: {', '.join(settings.ALLOWED_EXTENSIONS)}"
+            detail="Please provide either a file (image or PDF) or paste text to create a document."
         )
-    
-    # Read file data
-    file_data = await file.read()
     
     if len(file_data) > settings.MAX_CONTENT_LENGTH:
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
             detail=f"File too large. Maximum size is {settings.MAX_CONTENT_LENGTH / (1024*1024)}MB"
         )
-    
-    filename = secure_filename(file.filename)
     
     if not caption or not caption.strip():
         raise HTTPException(
@@ -211,7 +237,7 @@ async def upload_document(
         document = {
             "org_id": org_id,  # Use org_id directly from Clerk token
             "uploader_id": current_user.get("clerk_user_id"),  # Use Clerk user ID
-            "created_at": datetime.utcnow(),
+            "created_at": datetime.now(timezone.utc),
             "metadata": {
                 "sender_name": sender_name,
                 "event_type": event_type,
@@ -220,7 +246,7 @@ async def upload_document(
                 "caption": caption.strip()
             },
             "assets": {
-                "file_type": file.content_type or f"application/{filename.split('.')[-1]}",
+                "file_type": content_type,
                 "s3_original_url": s3_original_key,  # Store key, not URL
                 "s3_thumbnail_url": s3_thumbnail_key  # Store key, not URL
             },
