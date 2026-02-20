@@ -67,7 +67,7 @@ def extract_text_from_pdf(file_data: bytes) -> str:
             text += page.extract_text() + "\n"
         # Normalize whitespace - pypdf often produces "word \n\n word \n\n word" for complex layouts
         text = re.sub(r"\s+", " ", text.strip())
-        return text.strip()
+        return text
     except Exception as e:
         logger.error(f"Error extracting text from PDF: {e}")
         return ""
