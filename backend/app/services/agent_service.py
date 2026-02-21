@@ -491,6 +491,7 @@ async def execute_agent_query(
                         "url": doc.get("url", ""),
                         "s3_original_url": doc.get("original_url", ""),
                         "summary": doc.get("summary", ""),
+                        "score": doc.get("score", 0),
                     }
                     if "sender" in doc:
                         document["sender"] = doc["sender"]

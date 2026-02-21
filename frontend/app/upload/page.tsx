@@ -5,13 +5,16 @@ import { useUser, useAuth } from '@clerk/nextjs';
 import { useRouter } from 'next/navigation';
 import Navbar from '@/components/Navbar';
 import { apiClient } from '@/lib/api';
-import { Upload as UploadIcon, Loader2 } from 'lucide-react';
+import { Upload as UploadIcon, Loader2, FileText } from 'lucide-react';
 
 export default function UploadPage() {
   const { user, isLoaded } = useUser();
   const { getToken } = useAuth();
   const router = useRouter();
+  const [uploadMode, setUploadMode] = useState<'file' | 'text'>('file');
   const [file, setFile] = useState<File | null>(null);
+  const [textContent, setTextContent] = useState('');
+  const [customFilename, setCustomFilename] = useState('');
   const [preview, setPreview] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     sender_name: '',
@@ -56,8 +59,7 @@ export default function UploadPage() {
     const selectedFile = e.target.files?.[0];
     if (selectedFile) {
       setFile(selectedFile);
-      
-      // Create preview
+      setPreview(null);
       const reader = new FileReader();
       reader.onloadend = () => {
         setPreview(reader.result as string);
@@ -66,10 +68,29 @@ export default function UploadPage() {
     }
   }
 
+  function switchMode(mode: 'file' | 'text') {
+    setUploadMode(mode);
+    if (mode === 'file') {
+      setTextContent('');
+      setCustomFilename('');
+    } else {
+      setFile(null);
+      setPreview(null);
+    }
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!file || !formData.sender_name || !formData.event_type || !formData.doc_date || !formData.caption?.trim()) {
-      alert('Please fill in all required fields and select a file');
+    const hasFile = file && file.size > 0;
+    const hasText = textContent.trim().length > 0;
+    if (!hasFile && !hasText) {
+      alert(uploadMode === 'file'
+        ? 'Please select a file to upload'
+        : 'Please enter or paste some text');
+      return;
+    }
+    if (!formData.sender_name || !formData.event_type || !formData.doc_date || !formData.caption?.trim()) {
+      alert('Please fill in all required fields');
       return;
     }
 
@@ -77,14 +98,16 @@ export default function UploadPage() {
     try {
       const token = await getToken();
       const response = await apiClient.uploadDocument(
-        file, 
         {
+          ...(hasFile && { file }),
+          ...(hasText && { text: textContent.trim() }),
+          ...(hasText && customFilename.trim() && { custom_filename: customFilename.trim() }),
           sender_name: formData.sender_name,
           event_type: formData.event_type,
           recipient_name: formData.recipient_name || undefined,
           doc_date: formData.doc_date,
           caption: formData.caption.trim()
-        }, 
+        },
         token
       );
       
@@ -118,42 +141,109 @@ export default function UploadPage() {
         <h1 className="mb-8 text-3xl font-bold text-gray-800">Upload Document</h1>
         
         <form onSubmit={handleSubmit} className="space-y-6 rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-          {/* File Upload */}
+          {/* Upload mode toggle */}
           <div>
             <label className="mb-2 block text-sm font-medium text-gray-700">
-              Select File
+              Add document
             </label>
-            <div className="flex items-center justify-center rounded-lg border-2 border-dashed border-purple-200 bg-purple-50/30 p-8">
-              <div className="text-center">
-                <UploadIcon className="mx-auto h-12 w-12 text-purple-400" />
-                <div className="mt-4">
-                  <label className="cursor-pointer rounded-lg bg-purple-600 px-4 py-2 text-white hover:bg-purple-700 transition-colors shadow-sm">
-                    Choose File
-                    <input
-                      type="file"
-                      className="hidden"
-                      accept="image/*,.pdf"
-                      onChange={handleFileChange}
-                    />
-                  </label>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => switchMode('file')}
+                className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+                  uploadMode === 'file'
+                    ? 'bg-purple-600 text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                <UploadIcon className="h-4 w-4" />
+                Upload file
+              </button>
+              <button
+                type="button"
+                onClick={() => switchMode('text')}
+                className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+                  uploadMode === 'text'
+                    ? 'bg-purple-600 text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                <FileText className="h-4 w-4" />
+                Write or paste text
+              </button>
+            </div>
+          </div>
+
+          {uploadMode === 'file' ? (
+            <>
+              {/* File Upload */}
+              <div>
+                <label className="mb-2 block text-sm font-medium text-gray-700">
+                  Select File
+                </label>
+                <div className="flex items-center justify-center rounded-lg border-2 border-dashed border-purple-200 bg-purple-50/30 p-8">
+                  <div className="text-center">
+                    <UploadIcon className="mx-auto h-12 w-12 text-purple-400" />
+                    <div className="mt-4">
+                      <label className="cursor-pointer rounded-lg bg-purple-600 px-4 py-2 text-white hover:bg-purple-700 transition-colors shadow-sm">
+                        Choose File
+                        <input
+                          type="file"
+                          className="hidden"
+                          accept="image/*,.pdf"
+                          onChange={handleFileChange}
+                        />
+                      </label>
+                    </div>
+                    {file && (
+                      <p className="mt-2 text-sm text-gray-600">{file.name}</p>
+                    )}
+                  </div>
                 </div>
-                {file && (
-                  <p className="mt-2 text-sm text-gray-600">{file.name}</p>
+                {preview && (
+                  <div className="mt-4">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={preview}
+                      alt="Preview"
+                      className="mx-auto max-h-64 rounded-lg"
+                    />
+                  </div>
                 )}
               </div>
-            </div>
-            
-            {preview && (
-              <div className="mt-4">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={preview}
-                  alt="Preview"
-                  className="mx-auto max-h-64 rounded-lg"
+            </>
+          ) : (
+            <>
+              {/* Text input */}
+              <div>
+                <label className="mb-2 block text-sm font-medium text-gray-700">
+                  Your text
+                </label>
+                <textarea
+                  placeholder="Write or paste your text here. It will be saved as a PDF."
+                  value={textContent}
+                  onChange={(e) => setTextContent(e.target.value)}
+                  className="w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-red-900 focus:outline-none focus:ring-2 focus:ring-red-900 min-h-[120px] resize-y font-mono text-sm"
+                  rows={6}
                 />
               </div>
-            )}
-          </div>
+              <div>
+                <label className="mb-2 block text-sm font-medium text-gray-700">
+                  File name <span className="text-gray-500 text-xs">(optional)</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Mom's recipe, Vacation notes"
+                  value={customFilename}
+                  onChange={(e) => setCustomFilename(e.target.value)}
+                  className="w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-red-900 focus:outline-none focus:ring-2 focus:ring-red-900"
+                />
+                <p className="mt-1 text-xs text-gray-500">
+                  Leave blank to use an automatic name
+                </p>
+              </div>
+            </>
+          )}
 
           {/* Sender/Poster */}
           <div>
@@ -277,7 +367,11 @@ export default function UploadPage() {
           {/* Submit Button */}
           <button
             type="submit"
-            disabled={uploading || !file || !formData.caption?.trim()}
+            disabled={
+              uploading ||
+              (uploadMode === 'file' ? !file : !textContent.trim()) ||
+              !formData.caption?.trim()
+            }
             className="w-full rounded-lg bg-purple-600 px-6 py-3 text-white transition-colors hover:bg-purple-700 disabled:bg-gray-400 shadow-sm"
           >
             {uploading ? (

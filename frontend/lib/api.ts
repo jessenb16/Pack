@@ -96,23 +96,36 @@ class ApiClient {
     return this.request<Record<string, unknown>[]>(`/api/documents${query ? `?${query}` : ''}`, {}, token);
   }
 
-  async uploadDocument(file: File, metadata: {
-    sender_name: string;
-    event_type: string;
-    recipient_name?: string;
-    doc_date: string;
-    caption: string;
-  }, token?: string | null) {
-    // Append form fields first, then file - some multipart parsers have issues when file is first
+  async uploadDocument(
+    payload: {
+      file?: File;
+      text?: string;
+      custom_filename?: string;
+      sender_name: string;
+      event_type: string;
+      recipient_name?: string;
+      doc_date: string;
+      caption: string;
+    },
+    token?: string | null
+  ) {
     const formData = new FormData();
-    formData.append('sender_name', metadata.sender_name);
-    formData.append('event_type', metadata.event_type);
-    formData.append('doc_date', metadata.doc_date);
-    formData.append('caption', metadata.caption);
-    if (metadata.recipient_name) {
-      formData.append('recipient_name', metadata.recipient_name);
+    formData.append('sender_name', payload.sender_name);
+    formData.append('event_type', payload.event_type);
+    formData.append('doc_date', payload.doc_date);
+    formData.append('caption', payload.caption);
+    if (payload.recipient_name) {
+      formData.append('recipient_name', payload.recipient_name);
     }
-    formData.append('file', file);
+    if (payload.custom_filename) {
+      formData.append('custom_filename', payload.custom_filename);
+    }
+    if (payload.text) {
+      formData.append('text', payload.text);
+    }
+    if (payload.file) {
+      formData.append('file', payload.file);
+    }
 
     const url = `${this.baseUrl}/api/documents/upload`;
     const headers: HeadersInit = {};

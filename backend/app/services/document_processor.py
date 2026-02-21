@@ -1,6 +1,9 @@
 """Document processing pipeline for FastAPI."""
 import io
 import re
+import unicodedata
+
+from fpdf import FPDF
 from PIL import Image
 from pypdf import PdfReader
 from pdf2image import convert_from_bytes
@@ -16,6 +19,62 @@ from typing import Tuple
 logger = logging.getLogger(__name__)
 
 client = OpenAI(api_key=settings.OPENAI_API_KEY)
+
+
+def _sanitize_filename(name: str, max_length: int = 80) -> str:
+    """Sanitize user-provided filename: remove path chars, limit length, ensure .pdf."""
+    if not name or not name.strip():
+        return ""
+    # Remove path components and invalid chars
+    invalid = '<>:"/\\|?*'
+    clean = "".join(c for c in name.strip() if c not in invalid)
+    # Limit length (leave room for .pdf)
+    if len(clean) > max_length - 4:
+        clean = clean[: max_length - 4]
+    # Ensure .pdf extension
+    if not clean.lower().endswith(".pdf"):
+        clean = clean + ".pdf" if clean else "document.pdf"
+    return clean or "document.pdf"
+
+
+# Unicode → ASCII mapping for PDF (Helvetica supports Latin-1 only)
+_UNICODE_TO_ASCII = str.maketrans({
+    "\u2018": "'",   # left single quote
+    "\u2019": "'",   # right single quote (smart apostrophe)
+    "\u201c": '"',   # left double quote
+    "\u201d": '"',   # right double quote
+    "\u2013": "-",   # en dash
+    "\u2014": "-",   # em dash
+    "\u2026": "...", # ellipsis
+})
+
+
+def _normalize_text_for_pdf(text: str) -> str:
+    """Replace Unicode punctuation with ASCII so Helvetica can render it."""
+    result = text.translate(_UNICODE_TO_ASCII)
+    # Fallback: replace any remaining non-Latin-1 chars with closest ASCII or ?
+    return "".join(
+        c if ord(c) < 256 else unicodedata.normalize("NFKD", c).encode("ascii", "ignore").decode() or "?"
+        for c in result
+    )
+
+
+def text_to_pdf(text: str, filename_base: str = "text_upload") -> Tuple[bytes, str]:
+    """Generate a PDF from plain text using fpdf2."""
+    if not text or not text.strip():
+        raise ValueError("Text cannot be empty")
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Helvetica", size=12)
+    pdf.set_auto_page_break(auto=True, margin=15)
+    normalized = _normalize_text_for_pdf(text.strip())
+    # multi_cell auto-wraps and handles pagination
+    pdf.multi_cell(w=0, h=6, txt=normalized)
+    buffer = io.BytesIO()
+    pdf.output(buffer)
+    pdf_bytes = buffer.getvalue()
+    filename = f"{filename_base}.pdf" if not filename_base.lower().endswith(".pdf") else filename_base
+    return pdf_bytes, filename
 
 
 def generate_thumbnail(file_data: bytes, filename: str) -> Tuple[bytes, str]:
