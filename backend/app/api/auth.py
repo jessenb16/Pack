@@ -2,7 +2,12 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Header
 from typing import Optional
 
-from app.core.clerk_auth import verify_clerk_token, get_clerk_user, get_user_organizations
+from app.core.clerk_auth import (
+    verify_clerk_token,
+    get_clerk_user,
+    get_user_organizations,
+    get_clerk_session,
+)
 import logging
 
 logger = logging.getLogger(__name__)
@@ -66,15 +71,29 @@ def get_current_user(
         None
     )
     
-    # If not in token, fetch from Clerk API (more reliable)
+    # If not in token, try session active org (multi-org safe)
+    if not clerk_org_id:
+        session_id = clerk_claims.get("sid") or clerk_claims.get("session_id")
+        session = get_clerk_session(session_id) if session_id else None
+        if session:
+            clerk_org_id = (
+                session.get("active_organization_id") or
+                session.get("last_active_organization_id") or
+                session.get("organization_id")
+            )
+            if clerk_org_id:
+                logger.debug(f"Found org_id from session: {clerk_org_id}")
+
+    # If still not in token, fetch from Clerk API (single-org fallback)
     if not clerk_org_id:
         memberships = get_user_organizations(clerk_user_id)
+        if memberships and len(memberships) > 1:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Multiple organizations detected. Please select a family in the UI and retry."
+            )
         if memberships:
-            # Get the first organization (users typically have one)
-            # In the future, we could support multiple orgs or let user select
             first_membership = memberships[0]
-            
-            # Try different ways the org_id might be nested in the response
             clerk_org_id = (
                 first_membership.get("organization", {}).get("id") or
                 first_membership.get("organization_id") or
@@ -82,7 +101,6 @@ def get_current_user(
                 (isinstance(first_membership.get("organization"), str) and first_membership.get("organization")) or
                 None
             )
-            
             if clerk_org_id:
                 logger.debug(f"Found org_id from API: {clerk_org_id}")
             else:
@@ -155,7 +173,22 @@ def get_current_user_light(
         None
     )
     if not clerk_org_id:
+        session_id = clerk_claims.get("sid") or clerk_claims.get("session_id")
+        session = get_clerk_session(session_id) if session_id else None
+        if session:
+            clerk_org_id = (
+                session.get("active_organization_id") or
+                session.get("last_active_organization_id") or
+                session.get("organization_id")
+            )
+
+    if not clerk_org_id:
         memberships = get_user_organizations(clerk_user_id)
+        if memberships and len(memberships) > 1:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Multiple organizations detected. Please select a family in the UI and retry."
+            )
         if memberships:
             first_membership = memberships[0]
             clerk_org_id = (

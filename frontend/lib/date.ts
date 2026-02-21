@@ -17,3 +17,12 @@ export function formatDocDate(dateStr: string): string {
   const date = parseLocalDate(dateStr);
   return date ? date.toLocaleDateString() : dateStr || '—';
 }
+
+/** Format today's date as YYYY-MM-DD in the user's local time. */
+export function getTodayLocalDateString(): string {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}

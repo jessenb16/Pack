@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { useUser, SignOutButton } from '@clerk/nextjs';
+import { useUser, SignOutButton, OrganizationSwitcher } from '@clerk/nextjs';
 import { Home, Archive, MessageCircle, Upload, Settings, Menu, X } from 'lucide-react';
 
 const navLinks = [
@@ -110,6 +110,13 @@ export default function Navbar() {
             ))}
             {user && (
               <div className="flex items-center gap-4">
+                <OrganizationSwitcher
+                  appearance={{
+                    elements: {
+                      rootBox: 'hidden sm:block',
+                    },
+                  }}
+                />
                 <span className="text-sm text-gray-600">
                   {user.firstName || user.emailAddresses[0]?.emailAddress}
                 </span>
@@ -161,6 +168,9 @@ export default function Navbar() {
             ))}
             {user && (
               <div className="mt-2 flex flex-col gap-2 border-t border-gray-200 pt-4">
+                <div className="px-3">
+                  <OrganizationSwitcher />
+                </div>
                 <span className="px-3 py-1 text-sm text-gray-600">
                   {user.firstName || user.emailAddresses[0]?.emailAddress}
                 </span>

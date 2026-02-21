@@ -12,7 +12,7 @@ import { Calendar, Image as ImageIcon, Loader2, Mail, Users, ArrowRight } from '
 
 export default function DashboardPage() {
   const { user, isLoaded } = useUser();
-  const { getToken } = useAuth();
+  const { getToken, orgId } = useAuth();
   const router = useRouter();
   const [recentDocs, setRecentDocs] = useState<DocumentViewerDocument[]>([]);
   const [onThisDay, setOnThisDay] = useState<DocumentViewerDocument[]>([]);
@@ -61,14 +61,18 @@ export default function DashboardPage() {
       return;
     }
 
+    if (!orgId) {
+      setLoading(false);
+      return;
+    }
     loadDashboard();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, isLoaded]);
+  }, [user, isLoaded, orgId]);
 
   async function loadDashboard() {
     try {
       // Get token - backend will fetch org from Clerk API if not in token
-      const token = await getToken();
+      const token = await getToken({ organizationId: orgId || undefined });
       
       if (!token) {
         console.error('Failed to get token from Clerk');
@@ -126,7 +130,7 @@ export default function DashboardPage() {
 
   async function handleDelete(documentId: string) {
     try {
-      const token = await getToken();
+      const token = await getToken({ organizationId: orgId || undefined });
       const response = await apiClient.deleteDocument(documentId, token);
       
       if (response.error) {

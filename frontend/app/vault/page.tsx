@@ -11,7 +11,7 @@ import { X, Loader2 } from 'lucide-react';
 
 function VaultContent() {
   const { user, isLoaded } = useUser();
-  const { getToken } = useAuth();
+  const { getToken, orgId } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
   const [documents, setDocuments] = useState<DocumentViewerDocument[]>([]);
@@ -35,14 +35,27 @@ function VaultContent() {
       return;
     }
 
+    if (!orgId) {
+      setLoading(false);
+      return;
+    }
     loadDocuments();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, isLoaded, filters.sender, filters.event_type, filters.year]);
+  }, [user, isLoaded, orgId, filters.sender, filters.event_type, filters.year]);
+
+  useEffect(() => {
+    if (!orgId) return;
+    setDocuments([]);
+    setSenders([]);
+    setEventTypes([]);
+    setYears([]);
+    setSelectedDoc(null);
+  }, [orgId]);
 
   async function loadDocuments() {
     try {
       setLoading(true);
-      const token = await getToken();
+      const token = await getToken({ organizationId: orgId || undefined });
       const response = await apiClient.getDocuments(
         {
           sender: filters.sender || undefined,
@@ -56,26 +69,22 @@ function VaultContent() {
         const docs = response.data as unknown as DocumentViewerDocument[];
         setDocuments(docs);
 
-        // Only extract unique values for Smart Chips if we don't have them yet
-        // (to avoid unnecessary processing on filter changes)
-        if (senders.length === 0 || eventTypes.length === 0 || years.length === 0) {
-          const uniqueSenders = new Set<string>();
-          const uniqueEvents = new Set<string>();
-          const uniqueYears = new Set<number>();
+        const uniqueSenders = new Set<string>();
+        const uniqueEvents = new Set<string>();
+        const uniqueYears = new Set<number>();
 
-          docs.forEach((doc) => {
-            if (doc.metadata?.sender_name) uniqueSenders.add(doc.metadata.sender_name);
-            if (doc.metadata?.event_type) uniqueEvents.add(doc.metadata.event_type);
-            if (doc.metadata?.doc_date) {
-              const date = parseLocalDate(doc.metadata.doc_date);
-              if (date) uniqueYears.add(date.getFullYear());
-            }
-          });
+        docs.forEach((doc) => {
+          if (doc.metadata?.sender_name) uniqueSenders.add(doc.metadata.sender_name);
+          if (doc.metadata?.event_type) uniqueEvents.add(doc.metadata.event_type);
+          if (doc.metadata?.doc_date) {
+            const date = parseLocalDate(doc.metadata.doc_date);
+            if (date) uniqueYears.add(date.getFullYear());
+          }
+        });
 
-          setSenders(Array.from(uniqueSenders).sort());
-          setEventTypes(Array.from(uniqueEvents).sort());
-          setYears(Array.from(uniqueYears).sort((a, b) => b - a));
-        }
+        setSenders(Array.from(uniqueSenders).sort());
+        setEventTypes(Array.from(uniqueEvents).sort());
+        setYears(Array.from(uniqueYears).sort((a, b) => b - a));
       }
     } catch (error) {
       console.error('Error loading documents:', error);
@@ -109,7 +118,7 @@ function VaultContent() {
 
   async function handleDelete(documentId: string) {
     try {
-      const token = await getToken();
+      const token = await getToken({ organizationId: orgId || undefined });
       const response = await apiClient.deleteDocument(documentId, token);
       
       if (response.error) {

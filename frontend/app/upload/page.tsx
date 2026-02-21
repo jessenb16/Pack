@@ -1,15 +1,16 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useUser, useAuth } from '@clerk/nextjs';
 import { useRouter } from 'next/navigation';
 import Navbar from '@/components/Navbar';
 import { apiClient } from '@/lib/api';
 import { Upload as UploadIcon, Loader2, FileText } from 'lucide-react';
+import { getTodayLocalDateString } from '@/lib/date';
 
 export default function UploadPage() {
   const { user, isLoaded } = useUser();
-  const { getToken } = useAuth();
+  const { getToken, orgId } = useAuth();
   const router = useRouter();
   const [uploadMode, setUploadMode] = useState<'file' | 'text'>('file');
   const [file, setFile] = useState<File | null>(null);
@@ -20,7 +21,7 @@ export default function UploadPage() {
     sender_name: '',
     event_type: '',
     recipient_name: '',
-    doc_date: new Date().toISOString().split('T')[0],
+    doc_date: getTodayLocalDateString(),
     caption: '',
   });
   const [useCustomEventType, setUseCustomEventType] = useState(false);
@@ -28,21 +29,9 @@ export default function UploadPage() {
   const [eventTypes, setEventTypes] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
 
-  useEffect(() => {
-    if (!isLoaded) return;
-    
-    if (!user) {
-      router.push('/login');
-      return;
-    }
-
-    loadFamilyData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, isLoaded, router]);
-
-  async function loadFamilyData() {
+  const loadFamilyData = useCallback(async () => {
     try {
-      const token = await getToken();
+      const token = await getToken({ organizationId: orgId || undefined });
       const familyResponse = await apiClient.getFamily(token);
       
       if (familyResponse.data) {
@@ -53,7 +42,40 @@ export default function UploadPage() {
     } catch (error) {
       console.error('Error loading family data:', error);
     }
-  }
+  }, [getToken, orgId]);
+
+  useEffect(() => {
+    if (!isLoaded) return;
+    
+    if (!user) {
+      router.push('/login');
+      return;
+    }
+
+    if (!orgId) return;
+    loadFamilyData();
+  }, [user, isLoaded, router, orgId, loadFamilyData]);
+
+  useEffect(() => {
+    if (!orgId) return;
+    setMembers([]);
+    setEventTypes([]);
+    setFormData((prev) => ({
+      ...prev,
+      sender_name: '',
+      event_type: '',
+      recipient_name: '',
+      caption: '',
+      doc_date: getTodayLocalDateString(),
+    }));
+    setUseCustomEventType(false);
+    setUploadMode('file');
+    setFile(null);
+    setTextContent('');
+    setCustomFilename('');
+    setPreview(null);
+    loadFamilyData();
+  }, [orgId, loadFamilyData]);
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const selectedFile = e.target.files?.[0];
@@ -96,7 +118,7 @@ export default function UploadPage() {
 
     setUploading(true);
     try {
-      const token = await getToken();
+      const token = await getToken({ organizationId: orgId || undefined });
       const response = await apiClient.uploadDocument(
         {
           ...(hasFile && { file }),
