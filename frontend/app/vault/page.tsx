@@ -35,7 +35,10 @@ function VaultContent() {
       return;
     }
 
-    if (!orgId) return;
+    if (!orgId) {
+      setLoading(false);
+      return;
+    }
     loadDocuments();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, isLoaded, orgId, filters.sender, filters.event_type, filters.year]);
@@ -46,6 +49,7 @@ function VaultContent() {
     setSenders([]);
     setEventTypes([]);
     setYears([]);
+    setSelectedDoc(null);
   }, [orgId]);
 
   async function loadDocuments() {

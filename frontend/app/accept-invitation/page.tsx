@@ -47,7 +47,7 @@ export default function AcceptInvitationPage() {
       setStatus('error');
       setMessage('An error occurred. Please try logging in again.');
     }
-  }, [getToken, router]);
+  }, [getToken, orgId, router]);
 
   useEffect(() => {
     if (!isLoaded) return;

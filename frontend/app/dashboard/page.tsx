@@ -61,7 +61,10 @@ export default function DashboardPage() {
       return;
     }
 
-    if (!orgId) return;
+    if (!orgId) {
+      setLoading(false);
+      return;
+    }
     loadDashboard();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, isLoaded, orgId]);

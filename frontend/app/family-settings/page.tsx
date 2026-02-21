@@ -34,7 +34,10 @@ export default function FamilySettingsPage() {
       return;
     }
 
-    if (!orgId) return;
+    if (!orgId) {
+      setLoading(false);
+      return;
+    }
     loadFamilyData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, isLoaded, orgId]);

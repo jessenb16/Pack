@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useUser, useAuth } from '@clerk/nextjs';
 import { useRouter } from 'next/navigation';
 import Navbar from '@/components/Navbar';
@@ -29,6 +29,21 @@ export default function UploadPage() {
   const [eventTypes, setEventTypes] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
 
+  const loadFamilyData = useCallback(async () => {
+    try {
+      const token = await getToken({ organizationId: orgId || undefined });
+      const familyResponse = await apiClient.getFamily(token);
+      
+      if (familyResponse.data) {
+        // Get members (would need a separate endpoint or include in family response)
+        setMembers(Array.isArray(familyResponse.data.members) ? (familyResponse.data.members as Array<{ id: string; name: string; role: string }>) : []);
+        setEventTypes(Array.isArray(familyResponse.data.event_types) ? (familyResponse.data.event_types as string[]) : []);
+      }
+    } catch (error) {
+      console.error('Error loading family data:', error);
+    }
+  }, [getToken, orgId]);
+
   useEffect(() => {
     if (!isLoaded) return;
     
@@ -39,8 +54,7 @@ export default function UploadPage() {
 
     if (!orgId) return;
     loadFamilyData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, isLoaded, router, orgId]);
+  }, [user, isLoaded, router, orgId, loadFamilyData]);
 
   useEffect(() => {
     if (!orgId) return;
@@ -61,22 +75,7 @@ export default function UploadPage() {
     setCustomFilename('');
     setPreview(null);
     loadFamilyData();
-  }, [orgId]);
-
-  async function loadFamilyData() {
-    try {
-      const token = await getToken({ organizationId: orgId || undefined });
-      const familyResponse = await apiClient.getFamily(token);
-      
-      if (familyResponse.data) {
-        // Get members (would need a separate endpoint or include in family response)
-        setMembers(Array.isArray(familyResponse.data.members) ? (familyResponse.data.members as Array<{ id: string; name: string; role: string }>) : []);
-        setEventTypes(Array.isArray(familyResponse.data.event_types) ? (familyResponse.data.event_types as string[]) : []);
-      }
-    } catch (error) {
-      console.error('Error loading family data:', error);
-    }
-  }
+  }, [orgId, loadFamilyData]);
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const selectedFile = e.target.files?.[0];
