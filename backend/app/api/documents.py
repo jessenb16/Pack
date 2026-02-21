@@ -191,16 +191,29 @@ async def upload_document(
             filename = secure_filename(file.filename)
             content_type = file.content_type or f"application/{filename.rsplit('.', 1)[-1]}"
 
+    if file_data is None and text is not None and not text.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Text cannot be empty."
+        )
+
     if file_data is None and text and text.strip():
         # Text upload - generate PDF
-        filename_base = "text_upload"
+        text_value = text.strip()
+        approx_bytes = len(text_value.encode("utf-8"))
+        if approx_bytes > settings.MAX_CONTENT_LENGTH:
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail=f"Text too large. Maximum size is {settings.MAX_CONTENT_LENGTH / (1024*1024)}MB"
+            )
+        timestamp_suffix = datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S_%f')
+        filename_base = f"text_upload_{timestamp_suffix}"
         if custom_filename and custom_filename.strip():
             sanitized = _sanitize_filename(custom_filename.strip())
             if sanitized:
-                filename_base = sanitized.rsplit(".", 1)[0]
-        else:
-            filename_base = f"text_upload_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
-        file_data, filename = text_to_pdf(text.strip(), filename_base)
+                base_name = sanitized.rsplit(".", 1)[0]
+                filename_base = f"{base_name}_{timestamp_suffix}"
+        file_data, filename = text_to_pdf(text_value, filename_base)
 
     if file_data is None:
         raise HTTPException(

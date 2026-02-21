@@ -9,14 +9,14 @@ import { Loader2, CheckCircle, XCircle } from 'lucide-react';
 
 export default function AcceptInvitationPage() {
   const { user, isLoaded } = useUser();
-  const { getToken } = useAuth();
+  const { getToken, orgId } = useAuth();
   const router = useRouter();
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
   const [message, setMessage] = useState('');
 
   const handleInvitationAccepted = useCallback(async () => {
     try {
-      const token = await getToken();
+      const token = await getToken({ organizationId: orgId || undefined });
       
       // Make an API call to trigger sync in get_current_user
       const response = await apiClient.getFamily(token);

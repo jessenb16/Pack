@@ -197,6 +197,32 @@ def get_clerk_organization(clerk_org_id: str) -> Optional[Dict]:
         return None
 
 
+def get_clerk_session(session_id: str) -> Optional[Dict]:
+    """Get session information from Clerk API (no cache to honor org switching)."""
+    if not session_id:
+        return None
+    try:
+        headers = {
+            "Authorization": f"Bearer {get_clerk_secret_key()}",
+            "Content-Type": "application/json"
+        }
+        response = requests.get(
+            f"{CLERK_API_URL}/sessions/{session_id}",
+            headers=headers,
+            timeout=5
+        )
+        if response.status_code == 200:
+            return response.json()
+        logger.warning(f"Failed to get Clerk session: {response.status_code}")
+        return None
+    except requests.Timeout:
+        logger.warning(f"Timeout getting session: {session_id}")
+        return None
+    except Exception as e:
+        logger.error(f"Error getting Clerk session: {e}")
+        return None
+
+
 def get_user_organizations(clerk_user_id: str) -> List[Dict]:
     """
     Get all organizations that a user belongs to from Clerk API.

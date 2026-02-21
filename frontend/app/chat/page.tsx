@@ -15,12 +15,12 @@ interface Message {
 
 export default function ChatPage() {
   const { user, isLoaded } = useUser();
-  const { getToken } = useAuth();
+  const { getToken, orgId } = useAuth();
   const router = useRouter();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [sessionId] = useState<string>(() => {
+  const [sessionId, setSessionId] = useState<string>(() => {
     // Generate a session ID for this page load
     // This creates a new conversation thread per page session
     // To share history across page reloads, use localStorage
@@ -37,6 +37,13 @@ export default function ChatPage() {
     }
   }, [user, isLoaded, router]);
 
+  useEffect(() => {
+    if (!orgId) return;
+    setMessages([]);
+    setInput('');
+    setSessionId(`session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`);
+  }, [orgId]);
+
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -52,7 +59,7 @@ export default function ChatPage() {
     setLoading(true);
 
     try {
-      const token = await getToken();
+      const token = await getToken({ organizationId: orgId || undefined });
       // Pass sessionId to create session-based conversation thread
       // Remove sessionId parameter to use persistent thread (all conversations share history)
       const response = await apiClient.askPack(input, sessionId, token);

@@ -16,7 +16,7 @@ interface Invitation {
 
 export default function FamilySettingsPage() {
   const { user, isLoaded } = useUser();
-  const { getToken } = useAuth();
+  const { getToken, orgId } = useAuth();
   const router = useRouter();
   const [family, setFamily] = useState<Record<string, unknown> | null>(null);
   const [members, setMembers] = useState<Record<string, unknown>[]>([]);
@@ -34,15 +34,16 @@ export default function FamilySettingsPage() {
       return;
     }
 
+    if (!orgId) return;
     loadFamilyData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, isLoaded]);
+  }, [user, isLoaded, orgId]);
 
   async function loadFamilyData() {
     try {
       setLoading(true);
       // Get token - backend will fetch org from Clerk API if not in token
-      const token = await getToken();
+      const token = await getToken({ organizationId: orgId || undefined });
       
       if (!token) {
         setMessage({ type: 'error', text: 'Failed to get authentication token' });
@@ -97,7 +98,7 @@ export default function FamilySettingsPage() {
     setMessage(null);
 
     try {
-      const token = await getToken();
+      const token = await getToken({ organizationId: orgId || undefined });
       
       if (!token) {
         setMessage({ type: 'error', text: 'Failed to get authentication token' });
@@ -129,7 +130,7 @@ export default function FamilySettingsPage() {
     if (!confirm('Are you sure you want to revoke this invitation?')) return;
 
     try {
-      const token = await getToken();
+      const token = await getToken({ organizationId: orgId || undefined });
       
       if (!token) {
         setMessage({ type: 'error', text: 'Failed to get authentication token' });

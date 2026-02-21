@@ -6,10 +6,11 @@ import { useRouter } from 'next/navigation';
 import Navbar from '@/components/Navbar';
 import { apiClient } from '@/lib/api';
 import { Upload as UploadIcon, Loader2, FileText } from 'lucide-react';
+import { getTodayLocalDateString } from '@/lib/date';
 
 export default function UploadPage() {
   const { user, isLoaded } = useUser();
-  const { getToken } = useAuth();
+  const { getToken, orgId } = useAuth();
   const router = useRouter();
   const [uploadMode, setUploadMode] = useState<'file' | 'text'>('file');
   const [file, setFile] = useState<File | null>(null);
@@ -20,7 +21,7 @@ export default function UploadPage() {
     sender_name: '',
     event_type: '',
     recipient_name: '',
-    doc_date: new Date().toISOString().split('T')[0],
+    doc_date: getTodayLocalDateString(),
     caption: '',
   });
   const [useCustomEventType, setUseCustomEventType] = useState(false);
@@ -36,13 +37,35 @@ export default function UploadPage() {
       return;
     }
 
+    if (!orgId) return;
     loadFamilyData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, isLoaded, router]);
+  }, [user, isLoaded, router, orgId]);
+
+  useEffect(() => {
+    if (!orgId) return;
+    setMembers([]);
+    setEventTypes([]);
+    setFormData((prev) => ({
+      ...prev,
+      sender_name: '',
+      event_type: '',
+      recipient_name: '',
+      caption: '',
+      doc_date: getTodayLocalDateString(),
+    }));
+    setUseCustomEventType(false);
+    setUploadMode('file');
+    setFile(null);
+    setTextContent('');
+    setCustomFilename('');
+    setPreview(null);
+    loadFamilyData();
+  }, [orgId]);
 
   async function loadFamilyData() {
     try {
-      const token = await getToken();
+      const token = await getToken({ organizationId: orgId || undefined });
       const familyResponse = await apiClient.getFamily(token);
       
       if (familyResponse.data) {
@@ -96,7 +119,7 @@ export default function UploadPage() {
 
     setUploading(true);
     try {
-      const token = await getToken();
+      const token = await getToken({ organizationId: orgId || undefined });
       const response = await apiClient.uploadDocument(
         {
           ...(hasFile && { file }),
