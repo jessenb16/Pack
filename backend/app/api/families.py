@@ -149,7 +149,7 @@ async def send_invitation(
         )
 
     # Enforce membership limit (Clerk tier supports up to 5 members)
-    memberships = get_organization_members(org_id)
+    memberships = get_organization_members(org_id, bypass_cache=True)
     if len(memberships) >= 5:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,

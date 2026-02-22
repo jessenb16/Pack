@@ -33,9 +33,11 @@ export default function FamilySettingsPage() {
   const memberLimit = 5;
   const atMemberLimit = members.length >= memberLimit;
 
-  const loadFamilyData = useCallback(async (bustMembersCache = false) => {
+  const loadFamilyData = useCallback(async (bustMembersCache = false, showLoading = true) => {
     try {
-      setLoading(true);
+      if (showLoading) {
+        setLoading(true);
+      }
       // Get token - backend will fetch org from Clerk API if not in token
       const token = await getToken({ organizationId: orgId || undefined });
       
@@ -81,7 +83,9 @@ export default function FamilySettingsPage() {
       console.error('Error loading family data:', error);
       setMessage({ type: 'error', text: 'Failed to load family data. Please try again.' });
     } finally {
-      setLoading(false);
+      if (showLoading) {
+        setLoading(false);
+      }
     }
   }, [getToken, orgId, bypassMembersCacheUntil]);
 
@@ -107,7 +111,7 @@ export default function FamilySettingsPage() {
     if (previousImageUrl && currentImageUrl && previousImageUrl !== currentImageUrl) {
       const until = Date.now() + 30_000;
       setBypassMembersCacheUntil(until);
-      loadFamilyData(true);
+      loadFamilyData(true, false);
     }
     lastImageUrlRef.current = currentImageUrl;
   }, [user, loadFamilyData]);
