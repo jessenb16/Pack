@@ -24,7 +24,16 @@ export default function DashboardPage() {
   const [nameSaving, setNameSaving] = useState(false);
   const [nameError, setNameError] = useState<string | null>(null);
 
+  const memberLimit = 5;
+  const atMemberLimit = members.length >= memberLimit;
+
   const needsName = isLoaded && user && !(user.firstName?.trim());
+
+  function getMemberInitials(name: string) {
+    const parts = name.split(' ').filter(Boolean);
+    if (parts.length === 0) return '?';
+    return parts.slice(0, 2).map((part) => part[0]).join('').toUpperCase();
+  }
 
   useEffect(() => {
     if (user && needsName && !nameForm.firstName && !nameForm.lastName) {
@@ -259,31 +268,71 @@ export default function DashboardPage() {
           </section>
         )}
 
-        {/* Invite Family Members - Prominent Section */}
-        {!loading && family && (
-          <section className="mb-8 rounded-xl border border-blue-200 bg-gradient-to-r from-blue-50/80 to-indigo-50/80 p-6 shadow-md">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-center gap-4">
-                <div className="rounded-full bg-blue-100 p-3">
-                  <Mail className="h-6 w-6 text-blue-700" />
-                </div>
-                <div>
-                  <h2 className="text-2xl font-bold text-gray-900">Invite Family Members</h2>
-                  <p className="text-gray-600">
-                    {members.length === 1 
-                      ? "You're the only member. Invite others to start sharing memories!"
-                      : `${members.length} family member${members.length > 1 ? 's' : ''} in ${family.name}`
-                    }
-                  </p>
-                </div>
+        {/* People in Your Pack */}
+        {!loading && members.length > 0 && (
+          <section className="mb-8 rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <Users className="h-5 w-5 text-teal-600" />
+                <h2 className="text-xl font-semibold text-gray-800">People in Your Pack</h2>
               </div>
-              <Link
-                href="/family-settings"
-                className="flex items-center gap-2 rounded-lg bg-red-900 px-6 py-3 text-white transition-all hover:bg-red-800 shadow-sm"
-              >
-                <span>Invite Now</span>
-                <ArrowRight className="h-5 w-5" />
-              </Link>
+              {family && (
+                <div className="flex items-center gap-3 text-sm text-gray-600">
+                  <span>
+                    {members.length === 1
+                      ? "You're the only member."
+                      : `${members.length} family members`}
+                  </span>
+                  {atMemberLimit && (
+                    <span className="text-xs text-gray-500">Member limit reached</span>
+                  )}
+                  <Link
+                    href="/family-settings#invite-family"
+                    className={`inline-flex items-center gap-1.5 rounded-full px-4 py-1.5 text-xs font-semibold shadow-sm transition-colors ${
+                      atMemberLimit
+                        ? 'cursor-not-allowed bg-gray-300 text-gray-500'
+                        : 'bg-red-900 text-white hover:bg-red-800'
+                    }`}
+                    onClick={(event) => {
+                      if (atMemberLimit) {
+                        event.preventDefault();
+                        return;
+                      }
+                      if (typeof window !== 'undefined') {
+                        window.sessionStorage.setItem('scrollToInvite', '1');
+                      }
+                    }}
+                  >
+                    Invite
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </Link>
+                </div>
+              )}
+            </div>
+            <div className="flex gap-4 overflow-x-auto pb-2">
+              {members.map((member, idx) => {
+                const memberName = typeof member.name === 'string' ? member.name : String(member.name ?? '');
+                const imageUrl = typeof member.image_url === 'string' ? member.image_url : '';
+                const initials = getMemberInitials(memberName);
+                const key = typeof member.id === 'string' || typeof member.id === 'number'
+                  ? String(member.id)
+                  : `member-${idx}`;
+                return (
+                  <div key={key} className="flex w-28 flex-shrink-0 flex-col items-center text-center">
+                    <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-full bg-gray-100 text-base font-semibold text-gray-700">
+                      {imageUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={imageUrl} alt={memberName || 'Member'} className="h-full w-full object-cover" />
+                      ) : (
+                        <span>{initials}</span>
+                      )}
+                    </div>
+                    <p className="mt-2 w-full truncate text-sm text-gray-700">
+                      {memberName || 'Unknown'}
+                    </p>
+                  </div>
+                );
+              })}
             </div>
           </section>
         )}

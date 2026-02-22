@@ -24,6 +24,7 @@ router = APIRouter()
 
 @router.get("/me")
 async def get_my_family(
+    bust_members_cache: bool = False,
     current_user: dict = Depends(get_current_user_light),
     db: Database = Depends(get_db)
 ):
@@ -42,7 +43,7 @@ async def get_my_family(
     
     # Parallelize Clerk API calls
     clerk_org_future = loop.run_in_executor(executor, get_clerk_organization, org_id)
-    memberships_future = loop.run_in_executor(executor, get_organization_members, org_id)
+    memberships_future = loop.run_in_executor(executor, get_organization_members, org_id, bust_members_cache)
     
     # Wait for both to complete
     clerk_org, memberships = await asyncio.gather(clerk_org_future, memberships_future)
@@ -69,6 +70,7 @@ async def get_my_family(
             "id": public_user_data.get("user_id", ""),
             "name": name,
             "email": public_user_data.get("identifier", ""),
+            "image_url": public_user_data.get("image_url", ""),
             "role": membership.get("role", "member")
         })
     
@@ -88,6 +90,7 @@ async def get_my_family(
 
 @router.get("/members")
 async def get_family_members(
+    bust_members_cache: bool = False,
     current_user: dict = Depends(get_current_user_light)
 ):
     """Get all members of the current user's organization from Clerk."""
@@ -97,7 +100,7 @@ async def get_family_members(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="User is not part of an organization"
         )
-    memberships = get_organization_members(org_id)
+    memberships = get_organization_members(org_id, bust_members_cache)
     
     members = []
     for membership in memberships:
@@ -110,6 +113,7 @@ async def get_family_members(
             "id": public_user_data.get("user_id", ""),
             "name": name,
             "email": public_user_data.get("identifier", ""),
+            "image_url": public_user_data.get("image_url", ""),
             "role": membership.get("role", "member")
         })
     
@@ -142,6 +146,14 @@ async def send_invitation(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Clerk user ID not found"
+        )
+
+    # Enforce membership limit (Clerk tier supports up to 5 members)
+    memberships = get_organization_members(org_id)
+    if len(memberships) >= 5:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Your plan allows up to 5 members. Remove a member to invite someone new."
         )
     
     # Send invitation via Clerk; redirect to our app's sign-up so they use our page, not Clerk's hosted one

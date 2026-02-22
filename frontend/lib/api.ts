@@ -70,8 +70,13 @@ class ApiClient {
   // Note: Auth is handled by Clerk, these endpoints are for backend sync
 
   // Family endpoints
-  async getFamily(token?: string | null) {
-    return this.request<Record<string, unknown>>('/api/families/me', {}, token);
+  async getFamily(token?: string | null, options?: { bustMembersCache?: boolean }) {
+    const params = new URLSearchParams();
+    if (options?.bustMembersCache) {
+      params.append('bust_members_cache', '1');
+    }
+    const query = params.toString();
+    return this.request<Record<string, unknown>>(`/api/families/me${query ? `?${query}` : ''}`, {}, token);
   }
 
   async createFamily(name: string, token?: string | null) {
