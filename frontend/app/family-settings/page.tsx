@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useUser, useAuth } from '@clerk/nextjs';
 import { useRouter } from 'next/navigation';
 import Navbar from '@/components/Navbar';
@@ -25,26 +25,19 @@ export default function FamilySettingsPage() {
   const [inviteEmail, setInviteEmail] = useState('');
   const [sending, setSending] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [bypassMembersCacheUntil, setBypassMembersCacheUntil] = useState(0);
+  const lastImageUrlRef = useRef<string | null>(null);
+  const profileInputRef = useRef<HTMLInputElement | null>(null);
+  const [profileUploading, setProfileUploading] = useState(false);
+  const [profileError, setProfileError] = useState<string | null>(null);
+  const memberLimit = 5;
+  const atMemberLimit = members.length >= memberLimit;
 
-  useEffect(() => {
-    if (!isLoaded) return;
-    
-    if (!user) {
-      router.push('/login');
-      return;
-    }
-
-    if (!orgId) {
-      setLoading(false);
-      return;
-    }
-    loadFamilyData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, isLoaded, orgId]);
-
-  async function loadFamilyData() {
+  const loadFamilyData = useCallback(async (bustMembersCache = false, showLoading = true) => {
     try {
-      setLoading(true);
+      if (showLoading) {
+        setLoading(true);
+      }
       // Get token - backend will fetch org from Clerk API if not in token
       const token = await getToken({ organizationId: orgId || undefined });
       
@@ -55,8 +48,9 @@ export default function FamilySettingsPage() {
       }
       
       // Make all API calls in parallel for better performance
+      const shouldBust = bustMembersCache || Date.now() < bypassMembersCacheUntil;
       const [familyResponse, invitationsResponse] = await Promise.all([
-        apiClient.getFamily(token),
+        apiClient.getFamily(token, { bustMembersCache: shouldBust }),
         apiClient.getInvitations(token).catch(err => ({ error: err.message })) // Don't fail if invitations fail
       ]);
       
@@ -89,7 +83,68 @@ export default function FamilySettingsPage() {
       console.error('Error loading family data:', error);
       setMessage({ type: 'error', text: 'Failed to load family data. Please try again.' });
     } finally {
+      if (showLoading) {
+        setLoading(false);
+      }
+    }
+  }, [getToken, orgId, bypassMembersCacheUntil]);
+
+  useEffect(() => {
+    if (!isLoaded) return;
+    
+    if (!user) {
+      router.push('/login');
+      return;
+    }
+
+    if (!orgId) {
       setLoading(false);
+      return;
+    }
+    loadFamilyData();
+  }, [user, isLoaded, orgId, router, loadFamilyData]);
+
+  useEffect(() => {
+    if (!user) return;
+    const currentImageUrl = user.imageUrl || null;
+    const previousImageUrl = lastImageUrlRef.current;
+    if (previousImageUrl && currentImageUrl && previousImageUrl !== currentImageUrl) {
+      const until = Date.now() + 30_000;
+      setBypassMembersCacheUntil(until);
+      loadFamilyData(true, false);
+    }
+    lastImageUrlRef.current = currentImageUrl;
+  }, [user, loadFamilyData]);
+
+  useEffect(() => {
+    if (!isLoaded || loading) return;
+    const shouldScroll =
+      typeof window !== 'undefined' &&
+      window.sessionStorage.getItem('scrollToInvite') === '1';
+    const targetId = 'invite-family';
+    const el = document.getElementById(targetId);
+    if (!shouldScroll || !el) return;
+    const id = window.setTimeout(() => {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      window.sessionStorage.removeItem('scrollToInvite');
+    }, 50);
+    return () => window.clearTimeout(id);
+  }, [isLoaded, loading]);
+
+  async function handleProfileImageChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+    setProfileError(null);
+    setProfileUploading(true);
+    try {
+      await user.setProfileImage({ file });
+    } catch (err) {
+      setProfileError(err instanceof Error ? err.message : 'Failed to update profile photo');
+    } finally {
+      setProfileUploading(false);
+      if (profileInputRef.current) {
+        profileInputRef.current.value = '';
+      }
     }
   }
 
@@ -209,6 +264,44 @@ export default function FamilySettingsPage() {
           </div>
         </section>
 
+        {/* Profile */}
+        <section className="mb-8 rounded-xl bg-white border border-gray-200 p-6 shadow-sm">
+          <h2 className="mb-4 text-xl font-semibold text-gray-800">Your Profile Photo</h2>
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-full bg-gray-100 text-lg font-semibold text-gray-700">
+              {user?.imageUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={user.imageUrl} alt="Profile" className="h-full w-full object-cover" />
+              ) : (
+                <span>{user?.firstName?.[0]?.toUpperCase() || '?'}</span>
+              )}
+            </div>
+            <div>
+              <input
+                ref={profileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleProfileImageChange}
+                className="hidden"
+              />
+              <button
+                type="button"
+                onClick={() => profileInputRef.current?.click()}
+                disabled={profileUploading}
+                className="rounded-lg bg-gray-900 px-4 py-2 text-sm text-white transition-colors hover:bg-gray-800 disabled:bg-gray-400"
+              >
+                {profileUploading ? 'Uploading...' : 'Update Photo'}
+              </button>
+              {profileError && (
+                <p className="mt-2 text-sm text-red-600">{profileError}</p>
+              )}
+              <p className="mt-2 text-xs text-gray-500">
+                Upload a square image for best results.
+              </p>
+            </div>
+          </div>
+        </section>
+
         {/* Family Members */}
         <section className="mb-8 rounded-xl bg-white border border-gray-200 p-6 shadow-sm">
           <div className="mb-4 flex items-center gap-2">
@@ -239,7 +332,7 @@ export default function FamilySettingsPage() {
         </section>
 
         {/* Send Invitation */}
-        <section className="mb-8 rounded-xl bg-white border border-gray-200 p-6 shadow-sm">
+        <section id="invite-family" className="mb-8 rounded-xl bg-white border border-gray-200 p-6 shadow-sm scroll-mt-24">
           <div className="mb-4 flex items-center gap-2">
             <Mail className="h-5 w-5 text-rose-600" />
             <h2 className="text-xl font-semibold text-gray-800">Invite Family Members</h2>
@@ -252,6 +345,11 @@ export default function FamilySettingsPage() {
               }`}
             >
               {message.text}
+            </div>
+          )}
+          {atMemberLimit && (
+            <div className="mb-4 rounded-lg bg-amber-50 p-3 text-amber-800">
+              Your plan allows up to {memberLimit} members. Remove a member to invite someone new.
             </div>
           )}
 
@@ -268,7 +366,7 @@ export default function FamilySettingsPage() {
                 placeholder="family.member@example.com"
                 className="w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-red-900 focus:outline-none focus:ring-2 focus:ring-red-900"
                 required
-                disabled={sending}
+                disabled={sending || atMemberLimit}
               />
               <p className="mt-1 text-sm text-gray-500">
                 The invitee will receive an email with a link to join. They&apos;ll create their account when they accept the invitation.
@@ -276,7 +374,7 @@ export default function FamilySettingsPage() {
             </div>
             <button
               type="submit"
-              disabled={sending || !inviteEmail.trim()}
+              disabled={sending || !inviteEmail.trim() || atMemberLimit}
               className="rounded-lg bg-red-900 px-6 py-2 text-white transition-colors hover:bg-red-800 disabled:bg-gray-400"
             >
               {sending ? (

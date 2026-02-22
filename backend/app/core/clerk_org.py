@@ -92,13 +92,13 @@ def get_user_organizations(clerk_user_id: str) -> list:
         return []
 
 
-def get_organization_members(organization_id: str) -> list:
+def get_organization_members(organization_id: str, bypass_cache: bool = False) -> list:
     """Get all members of a Clerk organization (with caching)."""
     cache_key = ("get_organization_members", organization_id)
     current_time = time()
     
-    # Check cache
-    if cache_key in _clerk_cache:
+    # Check cache unless bypass is requested
+    if not bypass_cache and cache_key in _clerk_cache:
         cached_data, timestamp = _clerk_cache[cache_key]
         if current_time - timestamp < CACHE_TTL:
             logger.debug(f"Cache hit for organization members: {organization_id}")
