@@ -1,7 +1,36 @@
+'use client';
+
 import { SignUp } from '@clerk/nextjs';
 import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Suspense, useEffect } from 'react';
 
-export default function RegisterPage() {
+function RegisterContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  const ticket = searchParams.get('__clerk_ticket');
+  const accountStatus = searchParams.get('__clerk_status');
+  const hasInvitationParams = !!ticket && !!accountStatus;
+
+  // If user arrived with invitation params (from an old invite link pointing to /register),
+  // redirect to /accept-invitation which handles both new and existing users correctly.
+  // Don't render SignUp here - it shows an error for existing users.
+  useEffect(() => {
+    if (hasInvitationParams) {
+      const params = new URLSearchParams(searchParams.toString());
+      router.replace(`/accept-invitation?${params.toString()}`);
+    }
+  }, [hasInvitationParams, searchParams, router]);
+
+  if (hasInvitationParams) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-yellow-400 via-yellow-600 to-red-900">
+        <p className="text-white">Redirecting to accept invitation...</p>
+      </div>
+    );
+  }
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-yellow-400 via-yellow-600 to-red-900">
       <div className="w-full max-w-md px-4">
@@ -16,7 +45,7 @@ export default function RegisterPage() {
             Please enter your first and last name so family members can identify you
           </p>
         </div>
-        <SignUp 
+        <SignUp
           routing="path"
           path="/register"
           signInUrl="/login"
@@ -24,9 +53,9 @@ export default function RegisterPage() {
           forceRedirectUrl="/dashboard"
           appearance={{
             elements: {
-              formButtonPrimary: "bg-red-900 hover:bg-red-800",
-              card: "shadow-xl",
-            }
+              formButtonPrimary: 'bg-red-900 hover:bg-red-800',
+              card: 'shadow-xl',
+            },
           }}
         />
         <p className="mt-4 text-center text-white/80">
@@ -40,3 +69,16 @@ export default function RegisterPage() {
   );
 }
 
+export default function RegisterPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-yellow-400 via-yellow-600 to-red-900">
+          <p className="text-white">Loading...</p>
+        </div>
+      }
+    >
+      <RegisterContent />
+    </Suspense>
+  );
+}

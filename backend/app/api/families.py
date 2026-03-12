@@ -156,15 +156,15 @@ async def send_invitation(
             detail="Your plan allows up to 5 members. Remove a member to invite someone new."
         )
     
-    # Send invitation via Clerk; redirect to our app's sign-up so they use our page, not Clerk's hosted one
+    # Send invitation via Clerk; redirect to accept-invitation so we can handle both new and existing users
     from app.core.config import settings
-    signup_redirect = f"{settings.FRONTEND_URL.rstrip('/')}/register" if settings.FRONTEND_URL else None
+    invite_redirect = f"{settings.FRONTEND_URL.rstrip('/')}/accept-invitation" if settings.FRONTEND_URL else None
 
     invitation_result = send_clerk_organization_invitation(
         organization_id=org_id,
         email=invitation.email,
         inviter_user_id=clerk_user_id,
-        redirect_url=signup_redirect
+        redirect_url=invite_redirect
     )
     
     if not invitation_result:

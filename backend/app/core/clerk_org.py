@@ -169,7 +169,8 @@ def send_clerk_organization_invitation(
         data = {
             "email_address": email,
             "inviter_user_id": inviter_user_id,
-            "role": role
+            "role": role,
+            "ignore_existing": True,  # Allow inviting users who already have an account (e.g. to a second Pack)
         }
         if redirect_url:
             data["redirect_url"] = redirect_url
