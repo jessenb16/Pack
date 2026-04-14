@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useUser, useAuth } from '@clerk/nextjs';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Navbar from '@/components/Navbar';
@@ -333,5 +333,22 @@ function VaultContent() {
 }
 
 export default function VaultPage() {
-  return <VaultContent />;
+  // Next.js requires useSearchParams() consumers to be wrapped in Suspense.
+  // Keep fallback lightweight to avoid a blank/black screen flash.
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-gradient-to-br from-stone-100 via-slate-50 to-stone-100">
+          <Navbar />
+          <main className="mx-auto max-w-7xl px-4 py-8">
+            <div className="flex min-h-[60vh] items-center justify-center">
+              <Loader2 className="h-8 w-8 animate-spin text-red-900" />
+            </div>
+          </main>
+        </div>
+      }
+    >
+      <VaultContent />
+    </Suspense>
+  );
 }
