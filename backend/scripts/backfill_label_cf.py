@@ -33,7 +33,7 @@ def _normalize_list(raw: Any) -> List[Dict[str, str]]:
     if not isinstance(raw, list):
         raise ValueError("Invalid catalog shape (expected list). Refusing to overwrite; fix org_settings manually first.")
     out: List[Dict[str, str]] = []
-    seen: set[str] = set()
+    seen_id_by_cf: dict[str, str] = {}
     for e in raw:
         if not isinstance(e, dict):
             raise ValueError("Legacy or invalid catalog entry found (non-object). Run migrate_label_catalog first.")
@@ -45,9 +45,14 @@ def _normalize_list(raw: Any) -> List[Dict[str, str]]:
         if not lab_s:
             continue
         cf = _label_cf(lab_s)
-        if cf in seen:
-            continue
-        seen.add(cf)
+        lid_s = str(lid)
+        prev = seen_id_by_cf.get(cf)
+        if prev is not None and prev != lid_s:
+            raise ValueError(
+                "Duplicate label_cf with different ids found in org_settings; "
+                "resolve duplicates (or rerun migrate_label_catalog) before backfilling label_cf."
+            )
+        seen_id_by_cf[cf] = lid_s
         out.append({"id": str(lid), "label": lab_s, "label_cf": cf})
     return out
 

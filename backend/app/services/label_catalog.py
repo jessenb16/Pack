@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from uuid import uuid4
 
 from pymongo.database import Database
+from pymongo.errors import DuplicateKeyError
 
 KIND_SENDER = "sender"
 KIND_EVENT = "event_type"
@@ -97,16 +98,21 @@ def ensure_label(org_id: str, kind: str, label: Optional[str], db: Database) -> 
     # Atomic: only append if no entry with this label_cf exists.
     new_entry = {"id": str(uuid4()), "label": label_clean, "label_cf": label_cf}
     update_filter = {"_id": org_id, f"{field}.label_cf": {"$ne": label_cf}}
-    res = db.org_settings.update_one(
-        update_filter,
-        {
-            "$setOnInsert": {"_id": org_id, "senders": [], "event_types": [], "recipients": []},
-            "$push": {field: new_entry},
-        },
-        upsert=True,
-    )
+    try:
+        res = db.org_settings.update_one(
+            update_filter,
+            {
+                "$setOnInsert": {"_id": org_id, "senders": [], "event_types": [], "recipients": []},
+                "$push": {field: new_entry},
+            },
+            upsert=True,
+        )
+    except DuplicateKeyError:
+        # Likely a concurrent create: unique index rejected one writer.
+        # Fall back to reading the entry that won the race.
+        res = None
 
-    if res.upserted_id is not None or res.modified_count == 1:
+    if res is not None and (res.upserted_id is not None or res.modified_count == 1):
         return {"id": new_entry["id"], "label": new_entry["label"]}
 
     # Already exists (or raced). Read and return existing entry.
