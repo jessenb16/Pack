@@ -44,23 +44,25 @@ def _normalize_catalog_mixed(raw: Any) -> List[Dict[str, str]]:
     - list[str] (legacy)
     - list[{"id","label"}] (partial)
     - list[{"id","label","label_cf"}] (current)
-    Returns normalized entries with {id,label,label_cf}, de-duped by label_cf.
+    Returns normalized entries with {id,label,label_cf}.
+    Raises if duplicates exist with conflicting ids/sources, since silently
+    dropping one could orphan documents that reference the dropped id.
     """
     if not raw:
         return []
     if not isinstance(raw, list):
         raise ValueError("org_settings catalog has invalid shape (expected list)")
     out: List[Dict[str, str]] = []
-    seen: set[str] = set()
+    seen_id_by_cf: dict[str, str] = {}
     for e in raw:
         if isinstance(e, str):
             lab = e.strip()
             if not lab:
                 continue
             cf = _label_cf(lab)
-            if cf in seen:
+            if cf in seen_id_by_cf:
                 continue
-            seen.add(cf)
+            seen_id_by_cf[cf] = ""  # "string source" sentinel
             out.append({"id": str(uuid4()), "label": lab, "label_cf": cf})
             continue
         if isinstance(e, dict):
@@ -68,16 +70,22 @@ def _normalize_catalog_mixed(raw: Any) -> List[Dict[str, str]]:
             lab = e.get("label")
             if not (lid and lab is not None and str(lab).strip()):
                 continue
+            lid_s = str(lid)
             lab_s = str(lab).strip()
             cf = str(e.get("label_cf") or "").strip()
             expected = _label_cf(lab_s)
             if cf and cf != expected:
                 raise ValueError("org_settings catalogs contain inconsistent label_cf; run scripts.backfill_label_cf")
             cf = cf or expected
-            if cf in seen:
-                continue
-            seen.add(cf)
-            out.append({"id": str(lid), "label": lab_s, "label_cf": cf})
+            prev = seen_id_by_cf.get(cf)
+            if prev is not None and prev != lid_s:
+                raise ValueError(
+                    "org_settings catalog contains duplicate normalized label with conflicting ids. "
+                    f"label={lab_s!r} label_cf={cf!r} existing_id={prev!r} current_id={lid_s!r}. "
+                    "Resolve duplicate catalog entries before running scripts.migrate_label_catalog."
+                )
+            seen_id_by_cf[cf] = lid_s
+            out.append({"id": lid_s, "label": lab_s, "label_cf": cf})
             continue
         raise ValueError("org_settings catalog contains invalid entry type; run scripts.migrate_label_catalog")
     return out
