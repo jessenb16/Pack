@@ -1,6 +1,7 @@
 """MongoDB database connection."""
 from pymongo import MongoClient
 from pymongo.database import Database
+from pymongo.errors import OperationFailure
 from motor.motor_asyncio import AsyncIOMotorClient
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from app.core.config import settings
@@ -67,7 +68,30 @@ def _create_indexes(db: Database):
             ("org_settings_event_types_label_cf_unique", [("_id", 1), ("event_types.label_cf", 1)]),
             ("org_settings_recipients_label_cf_unique", [("_id", 1), ("recipients.label_cf", 1)]),
         ]:
-            db.org_settings.create_index(keys, name=name, unique=True, sparse=True)
+            try:
+                db.org_settings.create_index(keys, name=name, unique=True, sparse=True)
+            except OperationFailure as e:
+                # If an equivalent index already exists under a different name,
+                # Mongo returns IndexOptionsConflict. Accept it only if the
+                # existing index matches the required uniqueness guarantees.
+                if getattr(e, "code", None) != 85:  # IndexOptionsConflict
+                    raise
+                required_key = tuple(keys)
+                ok = False
+                for idx in db.org_settings.list_indexes():
+                    # idx["key"] is an ordered mapping of key -> direction
+                    key_items = tuple(idx.get("key", {}).items())
+                    if key_items != required_key:
+                        continue
+                    if idx.get("unique") is True and idx.get("sparse") is True:
+                        ok = True
+                        logger.info(
+                            f"Using existing org_settings index {idx.get('name')!r} "
+                            f"for required {name!r}"
+                        )
+                        break
+                if not ok:
+                    raise
         
         logger.info("Database indexes created successfully")
     except Exception as e:
