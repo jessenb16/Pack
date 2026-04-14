@@ -61,6 +61,10 @@ def _create_indexes(db: Database):
         
         # Index on org_settings _id (already indexed as _id, but explicit is good)
         db.org_settings.create_index("_id")
+        # Enforce catalog uniqueness (no duplicate label_cf within a catalog array)
+        db.org_settings.create_index([("_id", 1), ("senders.label_cf", 1)], unique=True, sparse=True)
+        db.org_settings.create_index([("_id", 1), ("event_types.label_cf", 1)], unique=True, sparse=True)
+        db.org_settings.create_index([("_id", 1), ("recipients.label_cf", 1)], unique=True, sparse=True)
         
         logger.info("Database indexes created successfully")
     except Exception as e:

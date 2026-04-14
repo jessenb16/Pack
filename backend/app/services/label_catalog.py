@@ -29,7 +29,7 @@ def normalize_label_entries(entries: Any) -> List[Dict[str, str]]:
     out: List[Dict[str, str]] = []
     for e in entries:
         if not isinstance(e, dict):
-            continue
+            raise ValueError("org_settings catalogs must contain only object entries with id, label, and label_cf")
         lid = e.get("id")
         lab = e.get("label")
         lab_cf = e.get("label_cf")
@@ -37,7 +37,8 @@ def normalize_label_entries(entries: Any) -> List[Dict[str, str]]:
             continue
         if not (lab_cf and str(lab_cf).strip()):
             raise ValueError("org_settings catalogs must include label_cf; run scripts.backfill_label_cf")
-        out.append({"id": str(lid), "label": str(lab).strip(), "label_cf": str(lab_cf).strip()})
+        label_clean = str(lab).strip()
+        out.append({"id": str(lid), "label": label_clean, "label_cf": _label_cf(label_clean)})
     return out
 
 

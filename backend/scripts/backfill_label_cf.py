@@ -34,7 +34,7 @@ def _normalize_list(raw: Any) -> List[Dict[str, str]]:
     seen: set[str] = set()
     for e in raw:
         if not isinstance(e, dict):
-            continue
+            raise ValueError("Legacy or invalid catalog entry found (non-object). Run migrate_label_catalog first.")
         lid = e.get("id")
         lab = e.get("label")
         if not lid or lab is None:

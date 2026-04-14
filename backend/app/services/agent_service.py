@@ -84,9 +84,6 @@ async def fetch_documents(
     db = await get_database()
     org_settings_doc = await db.org_settings.find_one({"_id": org_id})
     senders, org_event_entries, recipients = catalog_lists(org_settings_doc or {})
-    org_sender_labels = [e["label"] for e in senders if e.get("label")]
-    org_event_labels = [e["label"] for e in org_event_entries if e.get("label")]
-    org_recipient_labels = [e["label"] for e in recipients if e.get("label")]
 
     parts: List[Dict[str, Any]] = [{"org_id": org_id}]
     if sender:
@@ -169,9 +166,6 @@ async def search_memory_contents(
     db = await get_database()
     org_settings_doc = await db.org_settings.find_one({"_id": org_id})
     senders, org_event_entries, recipients = catalog_lists(org_settings_doc or {})
-    org_sender_labels = [e["label"] for e in senders if e.get("label")]
-    org_event_labels = [e["label"] for e in org_event_entries if e.get("label")]
-    org_recipient_labels = [e["label"] for e in recipients if e.get("label")]
 
     query_vector = create_embedding(query)
     if not query_vector:

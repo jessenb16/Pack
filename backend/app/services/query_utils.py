@@ -28,7 +28,7 @@ def resolve_event_type(
 ) -> Optional[str]:
     """
     Resolve LLM's event_type guess to canonical org value.
-    Returns the exact string to use in the query, or None if no match.
+    Returns a normalized event type string for catalog matching.
     """
     if not raw or not raw.strip():
         return None
