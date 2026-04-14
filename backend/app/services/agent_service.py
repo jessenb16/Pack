@@ -90,11 +90,11 @@ async def fetch_documents(
 
     parts: List[Dict[str, Any]] = [{"org_id": org_id}]
     if sender:
-        sf = sender_metadata_filter(sender, senders, org_sender_labels)
+        sf = sender_metadata_filter(sender, senders)
         if sf:
             parts.append(sf)
     if event_type:
-        ef = event_metadata_filter(event_type, org_event_entries, org_event_labels)
+        ef = event_metadata_filter(event_type, org_event_entries)
         if ef:
             parts.append(ef)
     if year:
@@ -107,7 +107,7 @@ async def fetch_documents(
             }
         })
     if receiver and receiver.strip():
-        rf = recipient_metadata_filter(receiver, recipients, org_recipient_labels)
+        rf = recipient_metadata_filter(receiver, recipients)
         if rf:
             parts.append(rf)
 
@@ -180,15 +180,15 @@ async def search_memory_contents(
     filter_doc = {"org_id": {"$eq": org_id}}
     post_parts: List[Dict[str, Any]] = []
     if sender:
-        sf = sender_metadata_filter(sender, senders, org_sender_labels)
+        sf = sender_metadata_filter(sender, senders)
         if sf:
             post_parts.append(sf)
     if event_type:
-        ef = event_metadata_filter(event_type, org_event_entries, org_event_labels)
+        ef = event_metadata_filter(event_type, org_event_entries)
         if ef:
             post_parts.append(ef)
     if receiver and receiver.strip():
-        rf = recipient_metadata_filter(receiver, recipients, org_recipient_labels)
+        rf = recipient_metadata_filter(receiver, recipients)
         if rf:
             post_parts.append(rf)
     if year:

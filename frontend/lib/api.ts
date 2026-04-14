@@ -29,7 +29,7 @@ export interface LabelRef {
 export interface DocumentMetadataResponse {
   sender: LabelRef;
   event_type: LabelRef;
-  recipient?: LabelRef | null;
+  recipient: LabelRef | null;
   doc_date: string;
   caption?: string;
 }

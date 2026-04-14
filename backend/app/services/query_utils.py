@@ -94,37 +94,34 @@ def resolve_recipient_to_id(raw: Optional[str], catalog: List[Dict[str, Any]]) -
 def sender_metadata_filter(
     sender: Optional[str],
     catalog: List[Dict[str, Any]],
-    org_sender_labels: Optional[List[str]] = None,
 ) -> Optional[Dict[str, Any]]:
     if not sender or not str(sender).strip():
         return None
     sid = resolve_sender_to_id(sender, catalog)
     if not sid:
-        return None
+        return {"metadata.sender_id": {"$in": []}}
     return {"metadata.sender_id": sid}
 
 
 def event_metadata_filter(
     event_type: Optional[str],
     catalog: List[Dict[str, Any]],
-    org_event_labels: Optional[List[str]] = None,
 ) -> Optional[Dict[str, Any]]:
     if not event_type or not str(event_type).strip():
         return None
     eid = resolve_event_type_to_id(event_type, catalog)
     if not eid:
-        return None
+        return {"metadata.event_type_id": {"$in": []}}
     return {"metadata.event_type_id": eid}
 
 
 def recipient_metadata_filter(
     receiver: Optional[str],
     catalog: List[Dict[str, Any]],
-    org_recipient_labels: Optional[List[str]] = None,
 ) -> Optional[Dict[str, Any]]:
     if not receiver or not str(receiver).strip():
         return None
     rid = resolve_recipient_to_id(receiver, catalog)
     if not rid:
-        return None
+        return {"metadata.recipient_id": {"$in": []}}
     return {"metadata.recipient_id": rid}

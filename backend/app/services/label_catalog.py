@@ -1,4 +1,4 @@
-"""Org label catalog: embedded {id, label} lists in org_settings (senders, event_types, recipients)."""
+"""Org label catalog: embedded {id, label, label_cf} lists in org_settings (senders, event_types, recipients)."""
 from __future__ import annotations
 
 import re
@@ -33,8 +33,11 @@ def normalize_label_entries(entries: Any) -> List[Dict[str, str]]:
         lid = e.get("id")
         lab = e.get("label")
         lab_cf = e.get("label_cf")
-        if lid and lab is not None and str(lab).strip() and lab_cf and str(lab_cf).strip():
-            out.append({"id": str(lid), "label": str(lab).strip(), "label_cf": str(lab_cf).strip()})
+        if not (lid and lab is not None and str(lab).strip()):
+            continue
+        if not (lab_cf and str(lab_cf).strip()):
+            raise ValueError("org_settings catalogs must include label_cf; run scripts.backfill_label_cf")
+        out.append({"id": str(lid), "label": str(lab).strip(), "label_cf": str(lab_cf).strip()})
     return out
 
 
@@ -82,6 +85,9 @@ def ensure_label(org_id: str, kind: str, label: Optional[str], db: Database) -> 
     label_cf = _label_cf(label_clean)
 
     field = _kind_field(kind)
+
+    if db.org_settings.find_one({"_id": org_id, field: {"$elemMatch": {"label_cf": {"$exists": False}}}}, {"_id": 1}):
+        raise ValueError("org_settings catalogs must include label_cf; run scripts.backfill_label_cf")
 
     # Atomic: only append if no entry with this label_cf exists.
     new_entry = {"id": str(uuid4()), "label": label_clean, "label_cf": label_cf}
