@@ -233,12 +233,10 @@ async def patch_document_metadata(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
     ai_ctx = doc.get("ai_context") or {}
-    extracted = (ai_ctx.get("extracted_text") or "").strip()
-    if not extracted:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Document is missing extracted_text; re-upload or re-process is required.",
-        )
+    extracted = ai_ctx.get("extracted_text")
+    if extracted is None:
+        extracted = ""
+    extracted = str(extracted)
     caption = body.caption.strip()
     metadata, ai_context = _apply_metadata_and_ai(
         org_id, db, sender_entry, event_entry, recipient_entry,

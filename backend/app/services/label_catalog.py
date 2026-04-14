@@ -38,7 +38,11 @@ def normalize_label_entries(entries: Any) -> List[Dict[str, str]]:
         if not (lab_cf and str(lab_cf).strip()):
             raise ValueError("org_settings catalogs must include label_cf; run scripts.backfill_label_cf")
         label_clean = str(lab).strip()
-        out.append({"id": str(lid), "label": label_clean, "label_cf": _label_cf(label_clean)})
+        label_cf_clean = str(lab_cf).strip()
+        expected_label_cf = _label_cf(label_clean)
+        if label_cf_clean != expected_label_cf:
+            raise ValueError("org_settings catalogs contain inconsistent label_cf; run scripts.backfill_label_cf")
+        out.append({"id": str(lid), "label": label_clean, "label_cf": label_cf_clean})
     return out
 
 

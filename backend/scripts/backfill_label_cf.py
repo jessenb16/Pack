@@ -28,8 +28,10 @@ def _label_cf(label: str) -> str:
 
 
 def _normalize_list(raw: Any) -> List[Dict[str, str]]:
-    if not isinstance(raw, list):
+    if raw is None:
         return []
+    if not isinstance(raw, list):
+        raise ValueError("Invalid catalog shape (expected list). Refusing to overwrite; fix org_settings manually first.")
     out: List[Dict[str, str]] = []
     seen: set[str] = set()
     for e in raw:

@@ -1,6 +1,7 @@
 """MongoDB database connection."""
 from pymongo import MongoClient
 from pymongo.database import Database
+from pymongo.errors import DuplicateKeyError, OperationFailure
 from motor.motor_asyncio import AsyncIOMotorClient
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from app.core.config import settings
@@ -59,16 +60,28 @@ def _create_indexes(db: Database):
         db.documents.create_index("metadata.event_type_id")
         db.documents.create_index("metadata.recipient_id")
         
-        # Index on org_settings _id (already indexed as _id, but explicit is good)
-        db.org_settings.create_index("_id")
-        # Enforce catalog uniqueness (no duplicate label_cf within a catalog array)
-        db.org_settings.create_index([("_id", 1), ("senders.label_cf", 1)], unique=True, sparse=True)
-        db.org_settings.create_index([("_id", 1), ("event_types.label_cf", 1)], unique=True, sparse=True)
-        db.org_settings.create_index([("_id", 1), ("recipients.label_cf", 1)], unique=True, sparse=True)
+        # Enforce catalog uniqueness (no duplicate label_cf within a catalog array).
+        # These should fail loudly if there are duplicates, permissions issues, etc.
+        # (silently continuing would remove the uniqueness guarantee).
+        for name, keys in [
+            ("org_settings_senders_label_cf_unique", [("_id", 1), ("senders.label_cf", 1)]),
+            ("org_settings_event_types_label_cf_unique", [("_id", 1), ("event_types.label_cf", 1)]),
+            ("org_settings_recipients_label_cf_unique", [("_id", 1), ("recipients.label_cf", 1)]),
+        ]:
+            try:
+                db.org_settings.create_index(keys, name=name, unique=True, sparse=True)
+            except (DuplicateKeyError, OperationFailure) as e:
+                msg = str(e)
+                # Treat "already exists" as non-fatal; everything else should surface.
+                if "already exists" in msg or "Index with name" in msg:
+                    logger.info(f"Index {name} already exists")
+                else:
+                    raise
         
         logger.info("Database indexes created successfully")
     except Exception as e:
-        logger.warning(f"Could not create indexes (may already exist): {e}")
+        logger.error(f"Database index creation failed: {e}")
+        raise
 
 
 def get_org_filter(org_id: str) -> dict:
