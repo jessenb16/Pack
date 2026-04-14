@@ -53,10 +53,11 @@ def _create_indexes(db: Database):
         db.documents.create_index("created_at")
         # Compound index for common queries
         db.documents.create_index([("org_id", 1), ("created_at", -1)])
-        # Index on metadata fields for filtering
-        db.documents.create_index("metadata.sender_name")
-        db.documents.create_index("metadata.event_type")
+        # Index on metadata fields for filtering (label strings deprecated on documents)
         db.documents.create_index("metadata.doc_date")
+        db.documents.create_index("metadata.sender_id")
+        db.documents.create_index("metadata.event_type_id")
+        db.documents.create_index("metadata.recipient_id")
         
         # Index on org_settings _id (already indexed as _id, but explicit is good)
         db.org_settings.create_index("_id")

@@ -10,7 +10,7 @@ from pdf2image import convert_from_bytes
 from openai import OpenAI
 from app.core.config import settings
 import logging
-from typing import Tuple
+from typing import Tuple, Optional
 
 # SYSTEM REQUIREMENT: This module requires 'poppler-utils' to be installed.
 # On Mac: brew install poppler
@@ -188,50 +188,40 @@ def create_embedding(text: str) -> list:
 
 
 def process_document(file_data: bytes, filename: str, caption: str = "") -> dict:
-    """Process document: generate thumbnail, extract content, create embedding.
-    Caption is prepended to text_content for better agent/embedding context."""
+    """Generate thumbnail and extracted text (OCR/vision). No caption merge; no embedding.
+
+    Callers build ai_context from metadata prefix + metadata.caption + extracted_text, then embed.
+    """
     try:
+        _ = caption  # unused; kept for backward-compatible call sites
         ext = filename.lower().split('.')[-1]
         
-        # Generate thumbnail
         thumbnail_data, thumbnail_filename = generate_thumbnail(file_data, filename)
         
-        # Extract text content (vision/PDF extraction)
-        text_content = None
+        extracted_text: Optional[str] = None
         if ext == 'pdf':
-            # Try PDF extraction first
-            text_content = extract_text_from_pdf(file_data)
+            extracted_text = extract_text_from_pdf(file_data)
             
-            # If no text (scanned PDF), use GPT-4o Vision
-            if not text_content or len(text_content.strip()) < 10:
+            if not extracted_text or len(extracted_text.strip()) < 10:
                 images = convert_from_bytes(file_data, first_page=1, last_page=1, dpi=150)
                 if images:
                     img_buffer = io.BytesIO()
                     images[0].save(img_buffer, format='JPEG')
                     img_buffer.seek(0)
-                    # Convert to base64 for API
                     import base64
                     img_base64 = base64.b64encode(img_buffer.read()).decode('utf-8')
-                    text_content = extract_text_from_image(img_base64, filename)
+                    extracted_text = extract_text_from_image(img_base64, filename)
         elif ext in {'png', 'jpg', 'jpeg', 'gif', 'jfif', 'webp'}:
-            # Convert image to base64 for API
             import base64
             img_base64 = base64.b64encode(file_data).decode('utf-8')
-            text_content = extract_text_from_image(img_base64, filename)
+            extracted_text = extract_text_from_image(img_base64, filename)
         
-        # Prepend user caption to text_content for agent/embedding context
-        if caption and caption.strip():
-            vision_part = (text_content or "").strip()
-            text_content = f"{caption.strip()}\n\n{vision_part}" if vision_part else caption.strip()
-        
-        # Generate embedding
-        embedding = create_embedding(text_content or "")
+        ext_clean = (extracted_text or "").strip()
         
         return {
             'thumbnail_data': thumbnail_data,
             'thumbnail_filename': thumbnail_filename,
-            'text_content': text_content,
-            'embedding': embedding
+            'extracted_text': ext_clean,
         }
         
     except Exception as e:

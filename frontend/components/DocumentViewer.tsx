@@ -1,22 +1,16 @@
 'use client';
 
-import { X, ZoomIn, Download, Trash2, Loader2 } from 'lucide-react';
+import { X, ZoomIn, Download, Trash2, Loader2, Pencil } from 'lucide-react';
 import { formatDocDate } from '@/lib/date';
 import { useCallback, useEffect, useState } from 'react';
+import { apiClient, type DocumentApiRecord } from '@/lib/api';
 
-export interface DocumentViewerDocument {
-  id: string;
-  s3_original_url: string;
-  s3_thumbnail_url?: string;
-  uploader_id?: string;
-  metadata: {
-    sender_name: string;
-    event_type: string;
-    doc_date: string;
-    recipient_name?: string;
-    caption?: string;
-  };
-  file_type: string;
+export type DocumentViewerDocument = DocumentApiRecord;
+
+export interface LabelCatalog {
+  senders: { id: string; label: string }[];
+  event_types: { id: string; label: string }[];
+  recipients: { id: string; label: string }[];
 }
 
 interface DocumentViewerProps {
@@ -26,6 +20,10 @@ interface DocumentViewerProps {
   uploaderId?: string;
   currentUserId?: string;
   onDelete?: (documentId: string) => void;
+  catalog?: LabelCatalog;
+  getAccessToken?: () => Promise<string | null>;
+  organizationId?: string | null;
+  onDocumentUpdated?: (doc: DocumentViewerDocument) => void;
 }
 
 export default function DocumentViewer({
@@ -35,11 +33,30 @@ export default function DocumentViewer({
   uploaderId,
   currentUserId,
   onDelete,
+  catalog,
+  getAccessToken,
+  organizationId,
+  onDocumentUpdated,
 }: DocumentViewerProps) {
   const [scale, setScale] = useState(1);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [contentLoaded, setContentLoaded] = useState(false);
+  const [showEdit, setShowEdit] = useState(false);
+  const [editSaving, setEditSaving] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+
+  const [senderMode, setSenderMode] = useState<'pick' | 'new'>('pick');
+  const [senderId, setSenderId] = useState('');
+  const [senderNew, setSenderNew] = useState('');
+  const [eventMode, setEventMode] = useState<'pick' | 'new'>('pick');
+  const [eventId, setEventId] = useState('');
+  const [eventNew, setEventNew] = useState('');
+  const [recipientMode, setRecipientMode] = useState<'none' | 'pick' | 'new'>('none');
+  const [recipientId, setRecipientId] = useState('');
+  const [recipientNew, setRecipientNew] = useState('');
+  const [docDate, setDocDate] = useState('');
+  const [caption, setCaption] = useState('');
 
   const canDelete = Boolean(
     uploaderId &&
@@ -47,6 +64,45 @@ export default function DocumentViewer({
       String(uploaderId).trim() !== '' &&
       String(uploaderId) === String(currentUserId)
   );
+
+  const canEdit = Boolean(
+    canDelete &&
+      catalog &&
+      getAccessToken &&
+      organizationId &&
+      onDocumentUpdated
+  );
+
+  const resetEditForm = useCallback(() => {
+    if (!doc) return;
+    const m = doc.metadata;
+    setSenderMode('pick');
+    setSenderId(m.sender?.id || '');
+    setSenderNew('');
+    setEventMode('pick');
+    setEventId(m.event_type?.id || '');
+    setEventNew('');
+    if (m.recipient?.id) {
+      setRecipientMode('pick');
+      setRecipientId(m.recipient.id);
+      setRecipientNew('');
+    } else if (m.recipient?.label) {
+      setRecipientMode('new');
+      setRecipientId('');
+      setRecipientNew(m.recipient.label);
+    } else {
+      setRecipientMode('none');
+      setRecipientId('');
+      setRecipientNew('');
+    }
+    setDocDate(m.doc_date || '');
+    setCaption(m.caption || '');
+    setEditError(null);
+  }, [doc]);
+
+  useEffect(() => {
+    if (showEdit && doc) resetEditForm();
+  }, [showEdit, doc, resetEditForm]);
 
   const handleEscape = useCallback(
     (e: KeyboardEvent) => {
@@ -63,6 +119,7 @@ export default function DocumentViewer({
         setContentLoaded(false);
         setScale(1);
         setShowDeleteConfirm(false);
+        setShowEdit(false);
       });
     }
     return () => {
@@ -89,7 +146,74 @@ export default function DocumentViewer({
     }
   };
 
+  async function handleSaveMetadata(e: React.FormEvent) {
+    e.preventDefault();
+    if (!doc || !getAccessToken || !organizationId || !onDocumentUpdated) return;
+
+    if (senderMode === 'pick' && !senderId) {
+      setEditError('Select a sender/poster or add a new one.');
+      return;
+    }
+    if (senderMode === 'new' && !senderNew.trim()) {
+      setEditError('Enter a sender/poster name.');
+      return;
+    }
+    if (eventMode === 'pick' && !eventId) {
+      setEditError('Select an event or add a new one.');
+      return;
+    }
+    if (eventMode === 'new' && !eventNew.trim()) {
+      setEditError('Enter an event type.');
+      return;
+    }
+    if (recipientMode === 'pick' && !recipientId) {
+      setEditError('Select a recipient or switch to add new / none.');
+      return;
+    }
+    if (recipientMode === 'new' && !recipientNew.trim()) {
+      setEditError('Enter a recipient name or choose none.');
+      return;
+    }
+    if (!caption.trim()) {
+      setEditError('Caption is required.');
+      return;
+    }
+
+    setEditSaving(true);
+    setEditError(null);
+    try {
+      const token = await getAccessToken();
+      const payload = {
+        doc_date: docDate,
+        caption: caption.trim(),
+        sender_id: senderMode === 'pick' ? senderId : undefined,
+        sender_label: senderMode === 'new' ? senderNew.trim() : undefined,
+        event_type_id: eventMode === 'pick' ? eventId : undefined,
+        event_type_label: eventMode === 'new' ? eventNew.trim() : undefined,
+        recipient_id:
+          recipientMode === 'pick' ? recipientId || undefined : undefined,
+        recipient_label:
+          recipientMode === 'new' ? recipientNew.trim() : undefined,
+      };
+      const res = await apiClient.patchDocumentMetadata(doc.id, payload, token);
+      if (res.error || !res.data) {
+        setEditError(typeof res.error === 'string' ? res.error : 'Save failed');
+        return;
+      }
+      onDocumentUpdated(res.data);
+      setShowEdit(false);
+    } catch (err) {
+      setEditError(err instanceof Error ? err.message : 'Save failed');
+    } finally {
+      setEditSaving(false);
+    }
+  }
+
   if (!isOpen || !doc) return null;
+
+  const senderLabel = doc.metadata.sender?.label ?? '';
+  const eventLabel = doc.metadata.event_type?.label ?? '';
+  const recipientLabel = doc.metadata.recipient?.label;
 
   const isPdf =
     doc.file_type === 'application/pdf' ||
@@ -109,7 +233,6 @@ export default function DocumentViewer({
         className="relative my-auto flex min-h-0 max-h-[min(95dvh,100%)] w-full max-w-6xl flex-col rounded-lg bg-white shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header with close button - always visible at top */}
         <div className="flex flex-shrink-0 flex-col gap-3 border-b bg-gray-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
           <div className="flex min-w-0 flex-1 items-start justify-between gap-2">
             <div className="min-w-0 flex-1">
@@ -117,17 +240,17 @@ export default function DocumentViewer({
                 id="document-viewer-title"
                 className="truncate text-lg font-bold text-gray-900 sm:text-xl"
               >
-                {doc.metadata.sender_name}
-                {doc.metadata.recipient_name && (
+                {senderLabel}
+                {recipientLabel && (
                   <span className="font-normal text-gray-600">
                     {' '}
-                    to {doc.metadata.recipient_name}
+                    to {recipientLabel}
                   </span>
                 )}
               </h2>
               <div className="mt-1 flex flex-wrap gap-2 text-sm text-gray-600 sm:gap-3">
                 <span className="rounded-full bg-gray-200 px-2 py-0.5 text-xs font-medium text-gray-700">
-                  {doc.metadata.event_type}
+                  {eventLabel}
                 </span>
                 <span>
                   {formatDocDate(doc.metadata.doc_date)}
@@ -137,7 +260,6 @@ export default function DocumentViewer({
                 <p className="mt-2 text-sm text-gray-700">{doc.metadata.caption}</p>
               )}
             </div>
-            {/* Close button - inside header, always visible, prominent on mobile */}
             <button
               onClick={onClose}
               className="flex flex-shrink-0 items-center justify-center rounded-full bg-gray-300 p-3 text-gray-800 transition-colors hover:bg-gray-400 active:bg-gray-500 min-w-[44px] min-h-[44px] md:bg-gray-200 md:p-2 md:min-w-0 md:min-h-0 md:hover:bg-gray-300"
@@ -156,6 +278,16 @@ export default function DocumentViewer({
               >
                 <ZoomIn className="h-4 w-4" />
                 {scale > 1 ? 'Reset' : 'Zoom'}
+              </button>
+            )}
+            {canEdit && (
+              <button
+                type="button"
+                onClick={() => setShowEdit(true)}
+                className="flex items-center gap-1 rounded-lg bg-gray-200 px-4 py-2 text-sm font-medium text-gray-800 hover:bg-gray-300 transition-colors"
+              >
+                <Pencil className="h-4 w-4" />
+                Edit metadata
               </button>
             )}
             {canDelete && (
@@ -191,11 +323,159 @@ export default function DocumentViewer({
           </div>
         </div>
 
-        {/* Content - scrollable */}
+        {showEdit && catalog && (
+          <div className="border-b border-amber-200 bg-amber-50/80 px-4 py-4 sm:px-6">
+            <h3 className="mb-3 text-sm font-semibold text-gray-800">Edit metadata</h3>
+            {editError && (
+              <p className="mb-3 rounded-lg bg-red-100 px-3 py-2 text-sm text-red-800">{editError}</p>
+            )}
+            <form onSubmit={handleSaveMetadata} className="grid gap-3 sm:grid-cols-2">
+              <div className="sm:col-span-2">
+                <label className="mb-1 block text-xs font-medium text-gray-700">Sender / poster</label>
+                <div className="flex flex-wrap gap-2">
+                  <select
+                    value={senderMode}
+                    onChange={(e) => setSenderMode(e.target.value as 'pick' | 'new')}
+                    className="rounded border border-gray-300 px-2 py-1.5 text-sm"
+                  >
+                    <option value="pick">Existing</option>
+                    <option value="new">New</option>
+                  </select>
+                  {senderMode === 'pick' ? (
+                    <select
+                      value={senderId}
+                      onChange={(e) => setSenderId(e.target.value)}
+                      className="min-w-[12rem] flex-1 rounded border border-gray-300 px-2 py-1.5 text-sm"
+                    >
+                      <option value="">Select…</option>
+                      {catalog.senders.map((s) => (
+                        <option key={s.id} value={s.id}>{s.label}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type="text"
+                      value={senderNew}
+                      onChange={(e) => setSenderNew(e.target.value)}
+                      className="min-w-[12rem] flex-1 rounded border border-gray-300 px-2 py-1.5 text-sm"
+                      placeholder="Name"
+                    />
+                  )}
+                </div>
+              </div>
+              <div className="sm:col-span-2">
+                <label className="mb-1 block text-xs font-medium text-gray-700">Event</label>
+                <div className="flex flex-wrap gap-2">
+                  <select
+                    value={eventMode}
+                    onChange={(e) => setEventMode(e.target.value as 'pick' | 'new')}
+                    className="rounded border border-gray-300 px-2 py-1.5 text-sm"
+                  >
+                    <option value="pick">Existing</option>
+                    <option value="new">New</option>
+                  </select>
+                  {eventMode === 'pick' ? (
+                    <select
+                      value={eventId}
+                      onChange={(e) => setEventId(e.target.value)}
+                      className="min-w-[12rem] flex-1 rounded border border-gray-300 px-2 py-1.5 text-sm"
+                    >
+                      <option value="">Select…</option>
+                      {catalog.event_types.map((s) => (
+                        <option key={s.id} value={s.id}>{s.label}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type="text"
+                      value={eventNew}
+                      onChange={(e) => setEventNew(e.target.value)}
+                      className="min-w-[12rem] flex-1 rounded border border-gray-300 px-2 py-1.5 text-sm"
+                      placeholder="Event type"
+                    />
+                  )}
+                </div>
+              </div>
+              <div className="sm:col-span-2">
+                <label className="mb-1 block text-xs font-medium text-gray-700">Recipient (optional)</label>
+                <div className="flex flex-wrap gap-2">
+                  <select
+                    value={recipientMode}
+                    onChange={(e) =>
+                      setRecipientMode(e.target.value as 'none' | 'pick' | 'new')
+                    }
+                    className="rounded border border-gray-300 px-2 py-1.5 text-sm"
+                  >
+                    <option value="none">None</option>
+                    <option value="pick">Existing</option>
+                    <option value="new">New</option>
+                  </select>
+                  {recipientMode === 'pick' && (
+                    <select
+                      value={recipientId}
+                      onChange={(e) => setRecipientId(e.target.value)}
+                      className="min-w-[12rem] flex-1 rounded border border-gray-300 px-2 py-1.5 text-sm"
+                    >
+                      <option value="">Select…</option>
+                      {catalog.recipients.map((s) => (
+                        <option key={s.id} value={s.id}>{s.label}</option>
+                      ))}
+                    </select>
+                  )}
+                  {recipientMode === 'new' && (
+                    <input
+                      type="text"
+                      value={recipientNew}
+                      onChange={(e) => setRecipientNew(e.target.value)}
+                      className="min-w-[12rem] flex-1 rounded border border-gray-300 px-2 py-1.5 text-sm"
+                      placeholder="Recipient"
+                    />
+                  )}
+                </div>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-700">Document date</label>
+                <input
+                  type="date"
+                  value={docDate}
+                  onChange={(e) => setDocDate(e.target.value)}
+                  className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+                  required
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <label className="mb-1 block text-xs font-medium text-gray-700">Caption</label>
+                <textarea
+                  value={caption}
+                  onChange={(e) => setCaption(e.target.value)}
+                  className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm min-h-[72px]"
+                  required
+                  rows={2}
+                />
+              </div>
+              <div className="flex flex-wrap gap-2 sm:col-span-2">
+                <button
+                  type="submit"
+                  disabled={editSaving}
+                  className="rounded-lg bg-red-900 px-4 py-2 text-sm font-medium text-white hover:bg-red-800 disabled:opacity-50"
+                >
+                  {editSaving ? 'Saving…' : 'Save'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowEdit(false)}
+                  className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+
         <div className="relative min-h-0 flex-1 overflow-auto bg-gray-100 p-4">
           {isPdf ? (
             <>
-              {/* Thumbnail placeholder - instant feedback while PDF loads */}
               {!contentLoaded && doc.s3_thumbnail_url && (
                 <div className="flex min-h-[60vh] items-center justify-center">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -221,7 +501,6 @@ export default function DocumentViewer({
             </>
           ) : (
             <>
-              {/* Thumbnail placeholder - instant feedback while full image loads */}
               {!contentLoaded && doc.s3_thumbnail_url && (
                 <div className="flex min-h-[50vh] items-center justify-center">
                   {/* eslint-disable-next-line @next/next/no-img-element */}

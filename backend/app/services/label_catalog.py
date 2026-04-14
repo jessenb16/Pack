@@ -1,0 +1,280 @@
+"""Org label catalog: embedded {id, label} lists in org_settings (senders, event_types, recipients)."""
+from __future__ import annotations
+
+import logging
+import re
+from typing import Any, Dict, List, Optional, Tuple
+from uuid import uuid4
+
+from pymongo.database import Database
+
+logger = logging.getLogger(__name__)
+
+KIND_SENDER = "sender"
+KIND_EVENT = "event_type"
+KIND_RECIPIENT = "recipient"
+
+
+def _kind_field(kind: str) -> str:
+    if kind == KIND_SENDER:
+        return "senders"
+    if kind == KIND_EVENT:
+        return "event_types"
+    if kind == KIND_RECIPIENT:
+        return "recipients"
+    raise ValueError(f"Unknown label kind: {kind}")
+
+
+def normalize_label_entries(entries: Any) -> List[Dict[str, str]]:
+    """Convert legacy string list or mixed list to [{id, label}, ...]."""
+    if not entries:
+        return []
+    out: List[Dict[str, str]] = []
+    for e in entries:
+        if isinstance(e, str) and e.strip():
+            out.append({"id": str(uuid4()), "label": e.strip()})
+        elif isinstance(e, dict):
+            lid = e.get("id")
+            lab = e.get("label")
+            if lid and lab is not None and str(lab).strip():
+                out.append({"id": str(lid), "label": str(lab).strip()})
+    return out
+
+
+def _catalog_triple_from_doc(doc: Dict) -> Tuple[List[Dict[str, str]], List[Dict[str, str]], List[Dict[str, str]]]:
+    senders_src = doc.get("senders") or doc.get("sender_names") or []
+    events_src = doc.get("event_types") or []
+    recipients_src = doc.get("recipients") or doc.get("recipient_names") or []
+    return (
+        normalize_label_entries(senders_src),
+        normalize_label_entries(events_src),
+        normalize_label_entries(recipients_src),
+    )
+
+
+def _needs_persist_migration(doc: Dict, senders: list, events: list, recipients: list) -> bool:
+    if doc.get("sender_names") or doc.get("recipient_names"):
+        return True
+    for key, normalized in ("senders", senders), ("event_types", events), ("recipients", recipients):
+        raw = doc.get(key)
+        if raw and len(raw) > 0 and isinstance(raw[0], str):
+            return True
+    return False
+
+
+def migrate_org_settings_document_shape(org_id: str, db: Database) -> Dict:
+    """Ensure org_settings uses senders/event_types/recipients as [{id,label}]. Migrates legacy string lists."""
+    doc = db.org_settings.find_one({"_id": org_id}) or {}
+    if not doc:
+        return {}
+    senders, events, recipients = _catalog_triple_from_doc(doc)
+    if _needs_persist_migration(doc, senders, events, recipients):
+        try:
+            db.org_settings.update_one(
+                {"_id": org_id},
+                {
+                    "$set": {
+                        "senders": senders,
+                        "event_types": events,
+                        "recipients": recipients,
+                    },
+                    "$unset": {"sender_names": "", "recipient_names": ""},
+                },
+                upsert=True,
+            )
+        except Exception as e:
+            logger.error(f"Error migrating org_settings for {org_id}: {e}")
+    return db.org_settings.find_one({"_id": org_id}) or {}
+
+
+def catalog_lists(settings_doc: Dict) -> Tuple[List[Dict[str, str]], List[Dict[str, str]], List[Dict[str, str]]]:
+    return _catalog_triple_from_doc(settings_doc or {})
+
+
+def find_entry_by_id(entries: List[Dict[str, str]], label_id: str) -> Optional[Dict[str, str]]:
+    for e in entries:
+        if e.get("id") == label_id:
+            return e
+    return None
+
+
+def find_entry_by_label_ci(entries: List[Dict[str, str]], label: str) -> Optional[Dict[str, str]]:
+    if not label or not label.strip():
+        return None
+    key = label.strip().casefold()
+    for e in entries:
+        if str(e.get("label", "")).strip().casefold() == key:
+            return e
+    return None
+
+
+def ensure_label(org_id: str, kind: str, label: Optional[str], db: Database) -> Optional[Dict[str, str]]:
+    """
+    Return {id, label} for this kind. Creates if missing (case-insensitive dedupe per kind).
+    recipient may be None/empty -> returns None.
+    """
+    if kind not in (KIND_SENDER, KIND_EVENT, KIND_RECIPIENT):
+        raise ValueError(f"Unknown kind {kind}")
+    if kind == KIND_RECIPIENT and (not label or not str(label).strip()):
+        return None
+    if not label or not str(label).strip():
+        raise ValueError("label required for this kind")
+    label_clean = str(label).strip()
+
+    migrate_org_settings_document_shape(org_id, db)
+    doc = db.org_settings.find_one({"_id": org_id}) or {"_id": org_id}
+    field = _kind_field(kind)
+    entries = normalize_label_entries(doc.get(field) or [])
+
+    existing = find_entry_by_label_ci(entries, label_clean)
+    if existing:
+        return existing
+
+    new_entry = {"id": str(uuid4()), "label": label_clean}
+    entries.append(new_entry)
+    db.org_settings.update_one(
+        {"_id": org_id},
+        {"$set": {field: entries}},
+        upsert=True,
+    )
+    return new_entry
+
+
+def resolve_label_from_id_or_text(
+    org_id: str,
+    kind: str,
+    label_id: Optional[str],
+    label_text: Optional[str],
+    db: Database,
+) -> Dict[str, str]:
+    """Resolve (id, label) from explicit id (validated) or new/existing label text."""
+    migrate_org_settings_document_shape(org_id, db)
+    doc = db.org_settings.find_one({"_id": org_id}) or {"_id": org_id}
+    field = _kind_field(kind)
+    entries = normalize_label_entries(doc.get(field) or [])
+
+    if label_id and str(label_id).strip():
+        entry = find_entry_by_id(entries, str(label_id).strip())
+        if not entry:
+            raise ValueError(f"Unknown {kind} id for this organization")
+        return entry
+
+    if label_text and str(label_text).strip():
+        return ensure_label(org_id, kind, str(label_text).strip(), db)  # type: ignore[arg-type]
+
+    raise ValueError(f"Either id or label is required for {kind}")
+
+
+def optional_recipient(
+    org_id: str,
+    label_id: Optional[str],
+    label_text: Optional[str],
+    db: Database,
+) -> Optional[Dict[str, str]]:
+    if label_id and str(label_id).strip():
+        return resolve_label_from_id_or_text(org_id, KIND_RECIPIENT, label_id, None, db)
+    if label_text and str(label_text).strip():
+        return ensure_label(org_id, KIND_RECIPIENT, str(label_text).strip(), db)
+    return None
+
+
+def build_id_index(entries: List[Dict[str, str]]) -> Dict[str, Dict[str, str]]:
+    return {e["id"]: e for e in entries if e.get("id")}
+
+
+_DATE_RE = re.compile(r"^(\d{4})-(\d{2})-(\d{2})$")
+
+
+def normalize_doc_date(raw: str) -> str:
+    """Normalize to YYYY-MM-DD for storage and comparisons."""
+    if not raw or not str(raw).strip():
+        raise ValueError("doc_date is required")
+    s = str(raw).strip()
+    if _DATE_RE.match(s):
+        return s
+    try:
+        from datetime import datetime
+
+        if "T" in s:
+            return datetime.fromisoformat(s.replace("Z", "+00:00")).date().isoformat()
+    except Exception:
+        pass
+    raise ValueError("doc_date must be YYYY-MM-DD")
+
+
+def build_metadata_prefix(
+    sender_label: str,
+    event_label: str,
+    doc_date: str,
+    recipient_label: Optional[str],
+) -> str:
+    lines = [
+        f"Sender: {sender_label}",
+        f"Event: {event_label}",
+        f"Date: {doc_date}",
+    ]
+    if recipient_label:
+        lines.append(f"Recipient: {recipient_label}")
+    return "\n".join(lines)
+
+
+def compose_ai_text_content(metadata_prefix: str, caption: str, extracted_text: str) -> str:
+    cap = (caption or "").strip()
+    ext = (extracted_text or "").strip()
+    parts: List[str] = []
+    if metadata_prefix.strip():
+        parts.append(metadata_prefix.strip())
+    if cap:
+        parts.append(cap)
+    if ext:
+        parts.append(ext)
+    return "\n\n".join(parts) if parts else ""
+
+
+def resolve_display_triple(
+    metadata: Dict[str, Any],
+    senders: List[Dict[str, str]],
+    events: List[Dict[str, str]],
+    recipients: List[Dict[str, str]],
+) -> Tuple[Dict[str, str], Dict[str, str], Optional[Dict[str, str]]]:
+    """Map stored metadata to {id,label} for API responses.
+
+    TODO(legacy-catalog): Remove fallbacks on metadata.sender_name / event_type / recipient_name
+    once every document has *_id populated (post-migration).
+    """
+    sender_id = metadata.get("sender_id")
+    event_id = metadata.get("event_type_id")
+    recipient_id = metadata.get("recipient_id")
+
+    sender_entry: Optional[Dict[str, str]] = None
+    if sender_id:
+        sender_entry = find_entry_by_id(senders, str(sender_id))
+    # TODO(legacy-catalog): delete sender_name branches below after migration verified
+    if not sender_entry and metadata.get("sender_name"):
+        sender_entry = find_entry_by_label_ci(senders, str(metadata["sender_name"]))
+    if not sender_entry and metadata.get("sender_name"):
+        sender_entry = {"id": "", "label": str(metadata["sender_name"])}
+    if not sender_entry:
+        sender_entry = {"id": "", "label": "Unknown"}
+
+    event_entry: Optional[Dict[str, str]] = None
+    if event_id:
+        event_entry = find_entry_by_id(events, str(event_id))
+    # TODO(legacy-catalog): delete event_type string branches below after migration verified
+    if not event_entry and metadata.get("event_type"):
+        event_entry = find_entry_by_label_ci(events, str(metadata["event_type"]))
+    if not event_entry and metadata.get("event_type"):
+        event_entry = {"id": "", "label": str(metadata["event_type"])}
+    if not event_entry:
+        event_entry = {"id": "", "label": "Unknown"}
+
+    recipient_entry: Optional[Dict[str, str]] = None
+    if recipient_id:
+        recipient_entry = find_entry_by_id(recipients, str(recipient_id))
+    # TODO(legacy-catalog): delete recipient_name branches below after migration verified
+    if not recipient_entry and metadata.get("recipient_name"):
+        recipient_entry = find_entry_by_label_ci(recipients, str(metadata["recipient_name"]))
+    if not recipient_entry and metadata.get("recipient_name"):
+        recipient_entry = {"id": "", "label": str(metadata["recipient_name"])}
+
+    return sender_entry, event_entry, recipient_entry
