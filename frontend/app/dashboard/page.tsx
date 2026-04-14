@@ -5,7 +5,7 @@ import { useUser, useAuth } from '@clerk/nextjs';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Navbar from '@/components/Navbar';
-import DocumentViewer, { type DocumentViewerDocument } from '@/components/DocumentViewer';
+import DocumentViewer, { type DocumentViewerDocument, type LabelCatalog } from '@/components/DocumentViewer';
 import { apiClient } from '@/lib/api';
 import { parseLocalDate } from '@/lib/date';
 import { Calendar, Image as ImageIcon, Loader2, Mail, Users, ArrowRight } from 'lucide-react';
@@ -20,6 +20,11 @@ export default function DashboardPage() {
   const [members, setMembers] = useState<Record<string, unknown>[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedDoc, setSelectedDoc] = useState<DocumentViewerDocument | null>(null);
+  const [labelCatalog, setLabelCatalog] = useState<LabelCatalog>({
+    senders: [],
+    event_types: [],
+    recipients: [],
+  });
   const [nameForm, setNameForm] = useState({ firstName: '', lastName: '' });
   const [nameSaving, setNameSaving] = useState(false);
   const [nameError, setNameError] = useState<string | null>(null);
@@ -78,6 +83,11 @@ export default function DashboardPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, isLoaded, orgId]);
 
+  useEffect(() => {
+    if (!orgId) return;
+    setLabelCatalog({ senders: [], event_types: [], recipients: [] });
+  }, [orgId]);
+
   async function loadDashboard() {
     try {
       // Get token - backend will fetch org from Clerk API if not in token
@@ -98,6 +108,12 @@ export default function DashboardPage() {
       // Handle family response (includes members already)
       if (familyResponse.data) {
         setFamily(familyResponse.data);
+        const fd = familyResponse.data as Record<string, unknown>;
+        setLabelCatalog({
+          senders: Array.isArray(fd.senders) ? (fd.senders as LabelCatalog['senders']) : [],
+          event_types: Array.isArray(fd.event_types) ? (fd.event_types as LabelCatalog['event_types']) : [],
+          recipients: Array.isArray(fd.recipients) ? (fd.recipients as LabelCatalog['recipients']) : [],
+        });
         // Members are already included in familyResponse.data.members
         setMembers(Array.isArray(familyResponse.data.members) ? (familyResponse.data.members as Record<string, unknown>[]) : []);
       } else if (familyResponse.error) {
@@ -114,7 +130,7 @@ export default function DashboardPage() {
       
       // Handle documents response
       if (documentsResponse.data) {
-        const docs = documentsResponse.data as unknown as DocumentViewerDocument[];
+        const docs = documentsResponse.data;
         setRecentDocs(docs.slice(0, 20));
         
         // Get "On This Day" documents
@@ -159,19 +175,18 @@ export default function DashboardPage() {
     }
   }
 
-  if (!isLoaded) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-red-900" />
-      </div>
-    );
-  }
+  const showInitialLoadingScreen = !isLoaded;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-stone-100 via-slate-50 to-stone-100">
       <Navbar />
       
       <main className="mx-auto max-w-7xl px-4 py-8">
+        {showInitialLoadingScreen ? (
+          <div className="flex min-h-[60vh] items-center justify-center">
+            <Loader2 className="h-8 w-8 animate-spin text-red-900" />
+          </div>
+        ) : null}
         {/* Document Viewer Modal */}
         <DocumentViewer
           isOpen={!!selectedDoc}
@@ -180,6 +195,14 @@ export default function DashboardPage() {
           uploaderId={selectedDoc?.uploader_id}
           currentUserId={user?.id}
           onDelete={handleDelete}
+          catalog={labelCatalog}
+          getAccessToken={() => getToken({ organizationId: orgId || undefined })}
+          organizationId={orgId}
+          onDocumentUpdated={(updated) => {
+            setRecentDocs((prev) => prev.map((d) => (d.id === updated.id ? updated : d)));
+            setOnThisDay((prev) => prev.map((d) => (d.id === updated.id ? updated : d)));
+            setSelectedDoc(updated);
+          }}
         />
 
         {/* Ask invited users (or anyone without a name) to set their display name */}
@@ -234,14 +257,7 @@ export default function DashboardPage() {
         )}
 
         <h1 className="mb-8 text-3xl font-bold text-gray-800">Dashboard</h1>
-        
-        {loading && (
-          <div className="mb-4 flex items-center justify-center">
-            <Loader2 className="h-5 w-5 animate-spin text-purple-600" />
-            <span className="ml-2 text-gray-600">Loading...</span>
-          </div>
-        )}
-        
+
         {/* No Organization Message */}
         {!loading && !family && (
           <section className="mb-8 rounded-xl border border-amber-200 bg-gradient-to-r from-amber-50/80 to-orange-50/80 p-6 shadow-md">
@@ -353,28 +369,31 @@ export default function DashboardPage() {
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-4 md:grid-cols-4 lg:grid-cols-6">
-              {recentDocs.map((doc) => (
-                <div
-                  key={doc.id}
-                  className="group cursor-pointer overflow-hidden rounded-lg bg-white shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 border border-gray-100"
-                  onClick={() => setSelectedDoc(doc)}
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={doc.s3_thumbnail_url}
-                    alt={doc.metadata?.recipient_name ? `${doc.metadata.sender_name} to ${doc.metadata.recipient_name}` : doc.metadata?.sender_name || 'Document'}
-                    className="h-48 w-full object-cover transition-transform group-hover:scale-105"
-                  />
-                  <div className="p-3">
-                    <p className="text-sm font-medium text-gray-900">
-                      {doc.metadata?.recipient_name
-                        ? `${doc.metadata.sender_name} to ${doc.metadata.recipient_name}`
-                        : doc.metadata?.sender_name}
-                    </p>
-                    <p className="text-xs text-gray-600">{doc.metadata?.event_type}</p>
+              {recentDocs.map((doc) => {
+                const s = doc.metadata.sender.label;
+                const r = doc.metadata.recipient?.label;
+                const ev = doc.metadata.event_type.label;
+                return (
+                  <div
+                    key={doc.id}
+                    className="group cursor-pointer overflow-hidden rounded-lg bg-white shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 border border-gray-100"
+                    onClick={() => setSelectedDoc(doc)}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={doc.s3_thumbnail_url}
+                      alt={r ? `${s} to ${r}` : s || 'Document'}
+                      className="h-48 w-full object-cover transition-transform group-hover:scale-105"
+                    />
+                    <div className="p-3">
+                      <p className="text-sm font-medium text-gray-900">
+                        {r ? `${s} to ${r}` : s}
+                      </p>
+                      <p className="text-xs text-gray-600">{ev}</p>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </section>
@@ -389,28 +408,31 @@ export default function DashboardPage() {
               <h2 className="text-2xl font-semibold text-gray-800">On This Day</h2>
             </div>
             <div className="grid grid-cols-2 gap-4 md:grid-cols-4 lg:grid-cols-6">
-              {onThisDay.map((doc) => (
-                <div
-                  key={doc.id}
-                  className="group cursor-pointer overflow-hidden rounded-lg bg-white shadow-sm transition-all hover:shadow-md hover:scale-105 border border-gray-100"
-                  onClick={() => setSelectedDoc(doc)}
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={doc.s3_thumbnail_url}
-                    alt={doc.metadata?.recipient_name ? `${doc.metadata.sender_name} to ${doc.metadata.recipient_name}` : doc.metadata?.sender_name || 'Document'}
-                    className="h-48 w-full object-cover transition-transform group-hover:scale-105"
-                  />
-                  <div className="p-3">
-                    <p className="text-sm font-medium text-gray-900">
-                      {doc.metadata?.recipient_name
-                        ? `${doc.metadata.sender_name} to ${doc.metadata.recipient_name}`
-                        : doc.metadata?.sender_name}
-                    </p>
-                    <p className="text-xs text-gray-600">{doc.metadata?.event_type}</p>
+              {onThisDay.map((doc) => {
+                const s = doc.metadata.sender.label;
+                const r = doc.metadata.recipient?.label;
+                const ev = doc.metadata.event_type.label;
+                return (
+                  <div
+                    key={doc.id}
+                    className="group cursor-pointer overflow-hidden rounded-lg bg-white shadow-sm transition-all hover:shadow-md hover:scale-105 border border-gray-100"
+                    onClick={() => setSelectedDoc(doc)}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={doc.s3_thumbnail_url}
+                      alt={r ? `${s} to ${r}` : s || 'Document'}
+                      className="h-48 w-full object-cover transition-transform group-hover:scale-105"
+                    />
+                    <div className="p-3">
+                      <p className="text-sm font-medium text-gray-900">
+                        {r ? `${s} to ${r}` : s}
+                      </p>
+                      <p className="text-xs text-gray-600">{ev}</p>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </section>
         )}

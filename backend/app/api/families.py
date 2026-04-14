@@ -15,7 +15,7 @@ from app.core.clerk_org import (
     revoke_clerk_organization_invitation,
     get_organization_members
 )
-from app.services.org_settings import get_org_settings, update_org_settings
+from app.services.org_settings import get_org_settings, get_catalog_for_org
 
 logger = logging.getLogger(__name__)
 
@@ -74,17 +74,17 @@ async def get_my_family(
             "role": membership.get("role", "member")
         })
     
-    # Get event types from org_settings (this is fast, MongoDB query)
-    org_settings = get_org_settings(org_id, db)
-    
+    get_org_settings(org_id, db)
+    senders, event_types, recipients = get_catalog_for_org(org_id, db)
+
     return {
         "id": org_id,
         "name": clerk_org.get("name", "Family"),
         "created_at": clerk_org.get("created_at"),
         "members": members,
-        "event_types": org_settings.get("event_types", []),
-        "sender_names": org_settings.get("sender_names", []),
-        "recipient_names": org_settings.get("recipient_names", [])
+        "senders": senders,
+        "event_types": event_types,
+        "recipients": recipients,
     }
 
 

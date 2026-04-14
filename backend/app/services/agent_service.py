@@ -12,14 +12,18 @@ from langgraph.checkpoint.mongodb import MongoDBSaver
 
 # App Imports
 from app.core.config import settings
-from app.core.database import get_database
+from app.core.database import get_database, get_db
 from app.services.document_processor import create_embedding
 from app.services.storage import get_signed_url, extract_s3_key_from_url
+from app.services.label_catalog import (
+    catalog_lists,
+    migrate_org_settings_document_shape,
+    resolve_display_triple,
+)
 from app.services.query_utils import (
-    resolve_event_type,
-    resolve_sender,
-    event_type_query_value,
-    sender_query_value,
+    sender_metadata_filter,
+    event_metadata_filter,
+    recipient_metadata_filter,
 )
 
 logger = logging.getLogger(__name__)
@@ -78,40 +82,39 @@ async def fetch_documents(
     if not org_id:
         return ("Security violation: No Organization ID found.", [])
 
-    # Load org settings for canonical event types and sender names
     db = await get_database()
+    migrate_org_settings_document_shape(org_id, get_db())
     org_settings_doc = await db.org_settings.find_one({"_id": org_id})
-    org_settings = org_settings_doc or {}
-    org_event_types = org_settings.get("event_types", [])
-    org_sender_names = org_settings.get("sender_names", [])
+    senders, org_event_entries, recipients = catalog_lists(org_settings_doc or {})
+    org_sender_labels = [e["label"] for e in senders if e.get("label")]
+    org_event_labels = [e["label"] for e in org_event_entries if e.get("label")]
+    org_recipient_labels = [e["label"] for e in recipients if e.get("label")]
 
-    # Build Query - use case-insensitive matching and normalize event type
-    # ("birthday card" and "birthday documents" both map to "Birthday")
-    query = {"org_id": org_id}
-
+    # TODO(legacy-catalog): filters use query_utils helpers with $or on old string fields; id-only later
+    parts: List[Dict[str, Any]] = [{"org_id": org_id}]
     if sender:
-        resolved_sender = resolve_sender(sender, org_sender_names) or sender.strip()
-        qv = sender_query_value(resolved_sender)
-        if qv is not None:
-            query["metadata.sender_name"] = qv
+        sf = sender_metadata_filter(sender, senders, org_sender_labels)
+        if sf:
+            parts.append(sf)
     if event_type:
-        resolved_event = resolve_event_type(event_type, org_event_types) or event_type.strip()
-        qv = event_type_query_value(resolved_event)
-        if qv is not None:
-            query["metadata.event_type"] = qv
+        ef = event_metadata_filter(event_type, org_event_entries, org_event_labels)
+        if ef:
+            parts.append(ef)
     if year:
-        # doc_date is stored as ISO date string "YYYY-MM-DD"
-        # Compare as strings in YYYY-MM-DD format
-        start_date = f"{year}-01-01"
-        end_date = f"{year + 1}-01-01"
-        query["metadata.doc_date"] = {
-            "$gte": start_date,
-            "$lt": end_date
-        }
+        start_date = f"{year:04d}-01-01"
+        end_date = f"{year + 1:04d}-01-01"
+        parts.append({
+            "metadata.doc_date": {
+                "$gte": start_date,
+                "$lt": end_date,
+            }
+        })
     if receiver and receiver.strip():
-        rv = sender_query_value(receiver.strip())
-        if rv is not None:
-            query["metadata.recipient_name"] = rv
+        rf = recipient_metadata_filter(receiver, recipients, org_recipient_labels)
+        if rf:
+            parts.append(rf)
+
+    query: Dict[str, Any] = parts[0] if len(parts) == 1 else {"$and": parts}
 
     # Execute (Async with Motor)
     cursor = db.documents.find(query).limit(10)
@@ -128,7 +131,10 @@ async def fetch_documents(
         original_key = extract_s3_key_from_url(assets.get("s3_original_url", ""))
         thumbnail_url = get_signed_url(thumbnail_key) if thumbnail_key else ""
         original_url = get_signed_url(original_key) if original_key else ""
-        summary = f"{d['metadata'].get('sender_name', 'Unknown')} - {d['metadata'].get('event_type', 'General')}"
+        s_lab, e_lab, _r = resolve_display_triple(
+            d.get("metadata") or {}, senders, org_event_entries, recipients
+        )
+        summary = f"{s_lab.get('label', 'Unknown')} - {e_lab.get('label', 'General')}"
         date = d["metadata"].get("doc_date", "Unknown")
         artifact.append({
             "id": str(d["_id"]),
@@ -163,40 +169,48 @@ async def search_memory_contents(
     if not org_id:
         return ("Error: No organization context.", [])
 
-    # Load org settings for canonical event types and sender names
     db = await get_database()
+    migrate_org_settings_document_shape(org_id, get_db())
     org_settings_doc = await db.org_settings.find_one({"_id": org_id})
-    org_settings = org_settings_doc or {}
-    org_event_types = org_settings.get("event_types", [])
-    org_sender_names = org_settings.get("sender_names", [])
+    senders, org_event_entries, recipients = catalog_lists(org_settings_doc or {})
+    org_sender_labels = [e["label"] for e in senders if e.get("label")]
+    org_event_labels = [e["label"] for e in org_event_entries if e.get("label")]
+    org_recipient_labels = [e["label"] for e in recipients if e.get("label")]
 
     query_vector = create_embedding(query)
     if not query_vector:
         return ("Failed to generate embedding for query.", [])
 
     filter_doc = {"org_id": {"$eq": org_id}}
-    post_filter = {}
+    # TODO(legacy-catalog): same as fetch_documents — id-only post_match after migration verified
+    post_parts: List[Dict[str, Any]] = []
     if sender:
-        resolved_sender = resolve_sender(sender, org_sender_names) or sender.strip()
-        qv = sender_query_value(resolved_sender)
-        if qv is not None:
-            post_filter["metadata.sender_name"] = qv
+        sf = sender_metadata_filter(sender, senders, org_sender_labels)
+        if sf:
+            post_parts.append(sf)
     if event_type:
-        resolved_event = resolve_event_type(event_type, org_event_types) or event_type.strip()
-        qv = event_type_query_value(resolved_event)
-        if qv is not None:
-            post_filter["metadata.event_type"] = qv
+        ef = event_metadata_filter(event_type, org_event_entries, org_event_labels)
+        if ef:
+            post_parts.append(ef)
     if receiver and receiver.strip():
-        rv = sender_query_value(receiver.strip())
-        if rv is not None:
-            post_filter["metadata.recipient_name"] = rv
+        rf = recipient_metadata_filter(receiver, recipients, org_recipient_labels)
+        if rf:
+            post_parts.append(rf)
     if year:
-        start_date = f"{year}-01-01"
-        end_date = f"{year + 1}-01-01"
-        post_filter["metadata.doc_date"] = {
-            "$gte": start_date,
-            "$lt": end_date
-        }
+        start_date = f"{year:04d}-01-01"
+        end_date = f"{year + 1:04d}-01-01"
+        post_parts.append({
+            "metadata.doc_date": {
+                "$gte": start_date,
+                "$lt": end_date
+            }
+        })
+
+    post_filter: Dict[str, Any] = {}
+    if len(post_parts) == 1:
+        post_filter = post_parts[0]
+    elif len(post_parts) > 1:
+        post_filter = {"$and": post_parts}
 
 
     pipeline = [
@@ -210,7 +224,7 @@ async def search_memory_contents(
                 "filter": filter_doc
             }
         },
-        {"$match": post_filter},
+        *([] if not post_filter else [{"$match": post_filter}]),
         {
             "$project": {
                 "ai_context.text_content": 1,
@@ -268,12 +282,15 @@ async def search_memory_contents(
         original_key = extract_s3_key_from_url(assets.get("s3_original_url", ""))
         thumbnail_url = get_signed_url(thumbnail_key) if thumbnail_key else ""
         original_url = get_signed_url(original_key) if original_key else ""
+        s_lab, _e, _r = resolve_display_triple(
+            r.get("metadata") or {}, senders, org_event_entries, recipients
+        )
         artifact.append({
             "id": str(r["_id"]),
             "score": r.get("score", 0),
             "url": thumbnail_url,
             "original_url": original_url,
-            "sender": r["metadata"].get("sender_name", "Unknown"),
+            "sender": s_lab.get("label", "Unknown"),
             "date": r["metadata"].get("doc_date", "Unknown"),
             "content": r["ai_context"].get("text_content", ""),
             "type": "rag_result"
@@ -356,16 +373,20 @@ async def execute_agent_query(
             prompt = system_prompt
             try:
                 db = await get_database()
+                migrate_org_settings_document_shape(org_id, get_db())
                 org_settings_doc = await db.org_settings.find_one({"_id": org_id})
-                org_settings = org_settings_doc or {}
-                event_types = org_settings.get("event_types", [])
-                sender_names = org_settings.get("sender_names", [])
-                if event_types or sender_names:
+                senders, events, recipients = catalog_lists(org_settings_doc or {})
+                ev_l = [e["label"] for e in events if e.get("label")]
+                s_l = [e["label"] for e in senders if e.get("label")]
+                r_l = [e["label"] for e in recipients if e.get("label")]
+                if ev_l or s_l or r_l:
                     prompt += "\n\nAVAILABLE FILTERS (use these values for fetch_documents when relevant):"
-                    if event_types:
-                        prompt += f"\n- Event types: {', '.join(event_types)}"
-                    if sender_names:
-                        prompt += f"\n- Senders: {', '.join(sender_names)}"
+                    if ev_l:
+                        prompt += f"\n- Event types: {', '.join(ev_l)}"
+                    if s_l:
+                        prompt += f"\n- Senders: {', '.join(s_l)}"
+                    if r_l:
+                        prompt += f"\n- Recipients: {', '.join(r_l)}"
             except Exception as e:
                 logger.debug(f"Could not load org settings for prompt: {e}")
             inputs = {"messages": [SystemMessage(content=prompt), HumanMessage(content=user_message)]}
@@ -376,16 +397,20 @@ async def execute_agent_query(
         prompt = system_prompt
         try:
             db = await get_database()
+            migrate_org_settings_document_shape(org_id, get_db())
             org_settings_doc = await db.org_settings.find_one({"_id": org_id})
-            org_settings = org_settings_doc or {}
-            event_types = org_settings.get("event_types", [])
-            sender_names = org_settings.get("sender_names", [])
-            if event_types or sender_names:
+            senders, events, recipients = catalog_lists(org_settings_doc or {})
+            ev_l = [e["label"] for e in events if e.get("label")]
+            s_l = [e["label"] for e in senders if e.get("label")]
+            r_l = [e["label"] for e in recipients if e.get("label")]
+            if ev_l or s_l or r_l:
                 prompt += "\n\nAVAILABLE FILTERS (use these values for fetch_documents when relevant):"
-                if event_types:
-                    prompt += f"\n- Event types: {', '.join(event_types)}"
-                if sender_names:
-                    prompt += f"\n- Senders: {', '.join(sender_names)}"
+                if ev_l:
+                    prompt += f"\n- Event types: {', '.join(ev_l)}"
+                if s_l:
+                    prompt += f"\n- Senders: {', '.join(s_l)}"
+                if r_l:
+                    prompt += f"\n- Recipients: {', '.join(r_l)}"
         except Exception as inner_e:
             logger.debug(f"Could not load org settings for prompt: {inner_e}")
         inputs = {"messages": [SystemMessage(content=prompt), HumanMessage(content=user_message)]}

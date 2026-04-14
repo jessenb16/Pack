@@ -5,6 +5,7 @@ import { useUser, useAuth } from '@clerk/nextjs';
 import { useRouter } from 'next/navigation';
 import Navbar from '@/components/Navbar';
 import { apiClient } from '@/lib/api';
+import type { LabelCatalog } from '@/components/DocumentViewer';
 import { Upload as UploadIcon, Loader2, FileText } from 'lucide-react';
 import { getTodayLocalDateString } from '@/lib/date';
 
@@ -18,15 +19,23 @@ export default function UploadPage() {
   const [customFilename, setCustomFilename] = useState('');
   const [preview, setPreview] = useState<string | null>(null);
   const [formData, setFormData] = useState({
-    sender_name: '',
-    event_type: '',
-    recipient_name: '',
     doc_date: getTodayLocalDateString(),
     caption: '',
   });
-  const [useCustomEventType, setUseCustomEventType] = useState(false);
-  const [members, setMembers] = useState<Array<{id: string; name: string; role: string}>>([]);
-  const [eventTypes, setEventTypes] = useState<string[]>([]);
+  const [catalog, setCatalog] = useState<LabelCatalog>({
+    senders: [],
+    event_types: [],
+    recipients: [],
+  });
+  const [senderMode, setSenderMode] = useState<'pick' | 'new'>('pick');
+  const [senderId, setSenderId] = useState('');
+  const [senderNew, setSenderNew] = useState('');
+  const [eventMode, setEventMode] = useState<'pick' | 'new'>('pick');
+  const [eventId, setEventId] = useState('');
+  const [eventNew, setEventNew] = useState('');
+  const [recipientMode, setRecipientMode] = useState<'none' | 'pick' | 'new'>('none');
+  const [recipientId, setRecipientId] = useState('');
+  const [recipientNew, setRecipientNew] = useState('');
   const [uploading, setUploading] = useState(false);
 
   const loadFamilyData = useCallback(async () => {
@@ -35,9 +44,12 @@ export default function UploadPage() {
       const familyResponse = await apiClient.getFamily(token);
       
       if (familyResponse.data) {
-        // Get members (would need a separate endpoint or include in family response)
-        setMembers(Array.isArray(familyResponse.data.members) ? (familyResponse.data.members as Array<{ id: string; name: string; role: string }>) : []);
-        setEventTypes(Array.isArray(familyResponse.data.event_types) ? (familyResponse.data.event_types as string[]) : []);
+        const d = familyResponse.data as Record<string, unknown>;
+        setCatalog({
+          senders: Array.isArray(d.senders) ? (d.senders as LabelCatalog['senders']) : [],
+          event_types: Array.isArray(d.event_types) ? (d.event_types as LabelCatalog['event_types']) : [],
+          recipients: Array.isArray(d.recipients) ? (d.recipients as LabelCatalog['recipients']) : [],
+        });
       }
     } catch (error) {
       console.error('Error loading family data:', error);
@@ -58,17 +70,21 @@ export default function UploadPage() {
 
   useEffect(() => {
     if (!orgId) return;
-    setMembers([]);
-    setEventTypes([]);
+    setCatalog({ senders: [], event_types: [], recipients: [] });
     setFormData((prev) => ({
       ...prev,
-      sender_name: '',
-      event_type: '',
-      recipient_name: '',
       caption: '',
       doc_date: getTodayLocalDateString(),
     }));
-    setUseCustomEventType(false);
+    setSenderMode('pick');
+    setSenderId('');
+    setSenderNew('');
+    setEventMode('pick');
+    setEventId('');
+    setEventNew('');
+    setRecipientMode('none');
+    setRecipientId('');
+    setRecipientNew('');
     setUploadMode('file');
     setFile(null);
     setTextContent('');
@@ -111,7 +127,31 @@ export default function UploadPage() {
         : 'Please enter or paste some text');
       return;
     }
-    if (!formData.sender_name || !formData.event_type || !formData.doc_date || !formData.caption?.trim()) {
+    if (senderMode === 'pick' && !senderId) {
+      alert('Select a sender/poster or add a new one');
+      return;
+    }
+    if (senderMode === 'new' && !senderNew.trim()) {
+      alert('Enter a sender/poster name');
+      return;
+    }
+    if (eventMode === 'pick' && !eventId) {
+      alert('Select an event or add a new one');
+      return;
+    }
+    if (eventMode === 'new' && !eventNew.trim()) {
+      alert('Enter an event type');
+      return;
+    }
+    if (recipientMode === 'pick' && !recipientId) {
+      alert('Select a recipient, add a new one, or choose none');
+      return;
+    }
+    if (recipientMode === 'new' && !recipientNew.trim()) {
+      alert('Enter a recipient name or choose none');
+      return;
+    }
+    if (!formData.doc_date || !formData.caption?.trim()) {
       alert('Please fill in all required fields');
       return;
     }
@@ -124,9 +164,12 @@ export default function UploadPage() {
           ...(hasFile && { file }),
           ...(hasText && { text: textContent.trim() }),
           ...(hasText && customFilename.trim() && { custom_filename: customFilename.trim() }),
-          sender_name: formData.sender_name,
-          event_type: formData.event_type,
-          recipient_name: formData.recipient_name || undefined,
+          sender_id: senderMode === 'pick' ? senderId : undefined,
+          sender_label: senderMode === 'new' ? senderNew.trim() : undefined,
+          event_type_id: eventMode === 'pick' ? eventId : undefined,
+          event_type_label: eventMode === 'new' ? eventNew.trim() : undefined,
+          recipient_id: recipientMode === 'pick' ? recipientId || undefined : undefined,
+          recipient_label: recipientMode === 'new' ? recipientNew.trim() : undefined,
           doc_date: formData.doc_date,
           caption: formData.caption.trim()
         },
@@ -270,21 +313,40 @@ export default function UploadPage() {
           {/* Sender/Poster */}
           <div>
             <label className="mb-2 block text-sm font-medium text-gray-700">
-              Sender/Poster
+              Sender/Poster <span className="text-red-600">*</span>
             </label>
-            <select
-              value={formData.sender_name}
-              onChange={(e) => setFormData({ ...formData, sender_name: e.target.value })}
-              className="w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-red-900 focus:outline-none focus:ring-2 focus:ring-red-900"
-              required
-            >
-              <option value="">Select sender/poster...</option>
-              {members.map((member) => (
-                <option key={member.id} value={member.name}>
-                  {member.name}
-                </option>
-              ))}
-            </select>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <select
+                value={senderMode}
+                onChange={(e) => setSenderMode(e.target.value as 'pick' | 'new')}
+                className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              >
+                <option value="pick">Choose existing</option>
+                <option value="new">Add new</option>
+              </select>
+              {senderMode === 'pick' ? (
+                <select
+                  value={senderId}
+                  onChange={(e) => setSenderId(e.target.value)}
+                  className="w-full flex-1 rounded-lg border border-gray-300 px-4 py-2 focus:border-red-900 focus:outline-none focus:ring-2 focus:ring-red-900"
+                  required
+                >
+                  <option value="">Select sender/poster...</option>
+                  {catalog.senders.map((s) => (
+                    <option key={s.id} value={s.id}>{s.label}</option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  type="text"
+                  value={senderNew}
+                  onChange={(e) => setSenderNew(e.target.value)}
+                  className="w-full flex-1 rounded-lg border border-gray-300 px-4 py-2 focus:border-red-900 focus:outline-none focus:ring-2 focus:ring-red-900"
+                  placeholder="Name"
+                  required
+                />
+              )}
+            </div>
           </div>
 
           {/* Event Type */}
@@ -292,55 +354,38 @@ export default function UploadPage() {
             <label className="mb-2 block text-sm font-medium text-gray-700">
               Event Type <span className="text-red-600">*</span>
             </label>
-            {!useCustomEventType ? (
-              <>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <select
+                value={eventMode}
+                onChange={(e) => setEventMode(e.target.value as 'pick' | 'new')}
+                className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              >
+                <option value="pick">Choose existing</option>
+                <option value="new">Add new</option>
+              </select>
+              {eventMode === 'pick' ? (
                 <select
-                  value={formData.event_type}
-                  onChange={(e) => setFormData({ ...formData, event_type: e.target.value })}
-                  className="w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-red-900 focus:outline-none focus:ring-2 focus:ring-red-900"
+                  value={eventId}
+                  onChange={(e) => setEventId(e.target.value)}
+                  className="w-full flex-1 rounded-lg border border-gray-300 px-4 py-2 focus:border-red-900 focus:outline-none focus:ring-2 focus:ring-red-900"
                   required
                 >
                   <option value="">Select event type...</option>
-                  {eventTypes.map((event) => (
-                    <option key={event} value={event}>
-                      {event}
-                    </option>
+                  {catalog.event_types.map((s) => (
+                    <option key={s.id} value={s.id}>{s.label}</option>
                   ))}
                 </select>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setUseCustomEventType(true);
-                    setFormData({ ...formData, event_type: '' });
-                  }}
-                  className="mt-2 text-sm text-red-900 hover:underline"
-                >
-                  Or enter a new event type
-                </button>
-              </>
-            ) : (
-              <>
+              ) : (
                 <input
                   type="text"
                   placeholder="Enter event type..."
-                  value={formData.event_type}
-                  onChange={(e) => setFormData({ ...formData, event_type: e.target.value })}
-                  className="w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-red-900 focus:outline-none focus:ring-2 focus:ring-red-900"
+                  value={eventNew}
+                  onChange={(e) => setEventNew(e.target.value)}
+                  className="w-full flex-1 rounded-lg border border-gray-300 px-4 py-2 focus:border-red-900 focus:outline-none focus:ring-2 focus:ring-red-900"
                   required
-                  autoFocus
                 />
-                <button
-                  type="button"
-                  onClick={() => {
-                    setUseCustomEventType(false);
-                    setFormData({ ...formData, event_type: '' });
-                  }}
-                  className="mt-2 text-sm text-red-900 hover:underline"
-                >
-                  Or select from existing types
-                </button>
-              </>
-            )}
+              )}
+            </div>
           </div>
 
           {/* Caption (Required) */}
@@ -363,13 +408,40 @@ export default function UploadPage() {
             <label className="mb-2 block text-sm font-medium text-gray-700">
               Recipient <span className="text-gray-500 text-xs">(optional)</span>
             </label>
-            <input
-              type="text"
-              placeholder="Who is this document for? (e.g., 'Mom', 'The Family')"
-              value={formData.recipient_name}
-              onChange={(e) => setFormData({ ...formData, recipient_name: e.target.value })}
-              className="w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-red-900 focus:outline-none focus:ring-2 focus:ring-red-900"
-            />
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <select
+                value={recipientMode}
+                onChange={(e) =>
+                  setRecipientMode(e.target.value as 'none' | 'pick' | 'new')
+                }
+                className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              >
+                <option value="none">None</option>
+                <option value="pick">Choose existing</option>
+                <option value="new">Add new</option>
+              </select>
+              {recipientMode === 'pick' && (
+                <select
+                  value={recipientId}
+                  onChange={(e) => setRecipientId(e.target.value)}
+                  className="w-full flex-1 rounded-lg border border-gray-300 px-4 py-2 focus:border-red-900 focus:outline-none focus:ring-2 focus:ring-red-900"
+                >
+                  <option value="">Select recipient...</option>
+                  {catalog.recipients.map((s) => (
+                    <option key={s.id} value={s.id}>{s.label}</option>
+                  ))}
+                </select>
+              )}
+              {recipientMode === 'new' && (
+                <input
+                  type="text"
+                  placeholder="Who is this for?"
+                  value={recipientNew}
+                  onChange={(e) => setRecipientNew(e.target.value)}
+                  className="w-full flex-1 rounded-lg border border-gray-300 px-4 py-2 focus:border-red-900 focus:outline-none focus:ring-2 focus:ring-red-900"
+                />
+              )}
+            </div>
           </div>
 
           {/* Date of document */}
@@ -392,7 +464,13 @@ export default function UploadPage() {
             disabled={
               uploading ||
               (uploadMode === 'file' ? !file : !textContent.trim()) ||
-              !formData.caption?.trim()
+              !formData.caption?.trim() ||
+              (senderMode === 'pick' && !senderId) ||
+              (senderMode === 'new' && !senderNew.trim()) ||
+              (eventMode === 'pick' && !eventId) ||
+              (eventMode === 'new' && !eventNew.trim()) ||
+              (recipientMode === 'pick' && !recipientId) ||
+              (recipientMode === 'new' && !recipientNew.trim())
             }
             className="w-full rounded-lg bg-purple-600 px-6 py-3 text-white transition-colors hover:bg-purple-700 disabled:bg-gray-400 shadow-sm"
           >

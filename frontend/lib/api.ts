@@ -21,6 +21,30 @@ export interface ApiResponse<T> {
   message?: string;
 }
 
+export interface LabelRef {
+  id: string;
+  label: string;
+}
+
+export interface DocumentMetadataResponse {
+  sender: LabelRef;
+  event_type: LabelRef;
+  recipient?: LabelRef;
+  doc_date: string;
+  caption?: string;
+}
+
+export interface DocumentApiRecord {
+  id: string;
+  family_id: string;
+  uploader_id: string;
+  metadata: DocumentMetadataResponse;
+  file_type: string;
+  s3_original_url: string;
+  s3_thumbnail_url: string;
+  created_at: string;
+}
+
 class ApiClient {
   private baseUrl: string;
 
@@ -91,14 +115,20 @@ class ApiClient {
   }
 
   // Document endpoints
-  async getDocuments(filters?: { sender?: string; event_type?: string; year?: number }, token?: string | null) {
+  async getDocuments(
+    // TODO(legacy-catalog): drop sender / event_type string filters once backend removes them
+    filters?: { sender_id?: string; event_type_id?: string; sender?: string; event_type?: string; year?: number },
+    token?: string | null
+  ) {
     const params = new URLSearchParams();
+    if (filters?.sender_id) params.append('sender_id', filters.sender_id);
+    if (filters?.event_type_id) params.append('event_type_id', filters.event_type_id);
     if (filters?.sender) params.append('sender', filters.sender);
     if (filters?.event_type) params.append('event_type', filters.event_type);
     if (filters?.year) params.append('year', filters.year.toString());
     
     const query = params.toString();
-    return this.request<Record<string, unknown>[]>(`/api/documents${query ? `?${query}` : ''}`, {}, token);
+    return this.request<DocumentApiRecord[]>(`/api/documents${query ? `?${query}` : ''}`, {}, token);
   }
 
   async uploadDocument(
@@ -106,22 +136,26 @@ class ApiClient {
       file?: File;
       text?: string;
       custom_filename?: string;
-      sender_name: string;
-      event_type: string;
-      recipient_name?: string;
+      sender_id?: string;
+      sender_label?: string;
+      event_type_id?: string;
+      event_type_label?: string;
+      recipient_id?: string;
+      recipient_label?: string;
       doc_date: string;
       caption: string;
     },
     token?: string | null
   ) {
     const formData = new FormData();
-    formData.append('sender_name', payload.sender_name);
-    formData.append('event_type', payload.event_type);
+    if (payload.sender_id) formData.append('sender_id', payload.sender_id);
+    if (payload.sender_label) formData.append('sender_label', payload.sender_label);
+    if (payload.event_type_id) formData.append('event_type_id', payload.event_type_id);
+    if (payload.event_type_label) formData.append('event_type_label', payload.event_type_label);
+    if (payload.recipient_id) formData.append('recipient_id', payload.recipient_id);
+    if (payload.recipient_label) formData.append('recipient_label', payload.recipient_label);
     formData.append('doc_date', payload.doc_date);
     formData.append('caption', payload.caption);
-    if (payload.recipient_name) {
-      formData.append('recipient_name', payload.recipient_name);
-    }
     if (payload.custom_filename) {
       formData.append('custom_filename', payload.custom_filename);
     }
@@ -150,7 +184,27 @@ class ApiClient {
     if (!response.ok) {
       return { error: data.detail || data.error || 'Upload failed' };
     }
-    return { data };
+    return { data: data as DocumentApiRecord };
+  }
+
+  async patchDocumentMetadata(
+    documentId: string,
+    payload: {
+      sender_id?: string;
+      sender_label?: string;
+      event_type_id?: string;
+      event_type_label?: string;
+      recipient_id?: string;
+      recipient_label?: string;
+      doc_date: string;
+      caption: string;
+    },
+    token?: string | null
+  ) {
+    return this.request<DocumentApiRecord>(`/api/documents/${documentId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    }, token);
   }
 
   async deleteDocument(documentId: string, token?: string | null) {
