@@ -19,13 +19,6 @@ class DocumentMetadata(BaseModel):
     caption: Optional[str] = None
 
 
-class DocumentCreate(BaseModel):
-    """Document creation model (legacy)."""
-    sender_name: str
-    event_type: str
-    doc_date: str
-
-
 class DocumentResponse(BaseModel):
     """Document response model."""
     id: str
@@ -39,13 +32,6 @@ class DocumentResponse(BaseModel):
 
     class Config:
         from_attributes = True
-
-
-class DocumentFilter(BaseModel):
-    """Document filter model."""
-    sender: Optional[str] = None
-    event_type: Optional[str] = None
-    year: Optional[int] = None
 
 
 class DocumentMetadataPatch(BaseModel):

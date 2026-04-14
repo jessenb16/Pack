@@ -2,8 +2,8 @@
 """
 Migrate legacy string metadata + org_settings to UUID label catalogs and document ids.
 
-Still reads metadata.sender_name / event_type / recipient_name so pre-migration DBs backfill correctly.
-After all envs are migrated, grep TODO(legacy-catalog) in app code to drop compat paths.
+NOTE: This script exists for one-time migrations only. It supports legacy fields
+from pre-ids versions of Pack.
 
 Usage (from repo root):
   cd backend && python -m scripts.migrate_label_catalog

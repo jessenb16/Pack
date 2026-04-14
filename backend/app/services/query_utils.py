@@ -1,5 +1,4 @@
 """Query normalization utilities for document fetch and search."""
-import re
 from typing import List, Optional, Dict, Any
 
 # Words that describe the document format, not the event type.
@@ -40,7 +39,6 @@ def resolve_event_type(
     for canonical in org_event_types or []:
         if canonical and canonical.lower() == normalized_lower:
             return canonical
-    # No match in org list - return normalized for case-insensitive regex fallback
     return normalized
 
 
@@ -57,20 +55,6 @@ def resolve_sender(raw: str, org_sender_names: List[str]) -> Optional[str]:
         if canonical and canonical.lower() == raw_lower:
             return canonical
     return raw_clean
-
-
-def event_type_query_value(value: str):
-    """Return MongoDB query value for metadata.event_type (case-insensitive)."""
-    if not value:
-        return None
-    return {"$regex": f"^{re.escape(value)}$", "$options": "i"}
-
-
-def sender_query_value(value: str):
-    """Return MongoDB query value for metadata.sender_name (case-insensitive)."""
-    if not value:
-        return None
-    return {"$regex": f"^{re.escape(value)}$", "$options": "i"}
 
 
 def _catalog_labels(catalog: List[Dict[str, Any]]) -> List[str]:
@@ -107,38 +91,17 @@ def resolve_recipient_to_id(raw: Optional[str], catalog: List[Dict[str, Any]]) -
     return resolve_sender_to_id(raw, catalog)
 
 
-# TODO(legacy-catalog): After migrate_label_catalog is verified on all envs, simplify to id-only:
-#   - *_metadata_filter: only {"metadata.*_id": id} from resolve_*_to_id; drop $or + sender_name /
-#     event_type / recipient_name branches and trim sender_query_value / event_type_query_value if unused.
-#   - documents GET string query params (sender, event_type) and frontend filters can go id-only.
-# Used by documents API list filters and agent_service tools until then.
-
-
 def sender_metadata_filter(
     sender: Optional[str],
     catalog: List[Dict[str, Any]],
     org_sender_labels: Optional[List[str]] = None,
 ) -> Optional[Dict[str, Any]]:
-    """
-    Mongo fragment for sender: prefer metadata.sender_id; OR legacy metadata.sender_name
-    for documents not yet migrated off string caches.
-    """
     if not sender or not str(sender).strip():
         return None
-    labels = org_sender_labels if org_sender_labels is not None else _catalog_labels(catalog)
     sid = resolve_sender_to_id(sender, catalog)
-    resolved = resolve_sender(sender, labels) or sender.strip()
-    qv = sender_query_value(resolved)
-    or_parts: List[Dict[str, Any]] = []
-    if sid:
-        or_parts.append({"metadata.sender_id": sid})
-    if qv:
-        or_parts.append({"metadata.sender_name": qv})
-    if not or_parts:
+    if not sid:
         return None
-    if len(or_parts) == 1:
-        return or_parts[0]
-    return {"$or": or_parts}
+    return {"metadata.sender_id": sid}
 
 
 def event_metadata_filter(
@@ -148,20 +111,10 @@ def event_metadata_filter(
 ) -> Optional[Dict[str, Any]]:
     if not event_type or not str(event_type).strip():
         return None
-    labels = org_event_labels if org_event_labels is not None else _catalog_labels(catalog)
     eid = resolve_event_type_to_id(event_type, catalog)
-    resolved = resolve_event_type(event_type, labels) or event_type.strip()
-    qv = event_type_query_value(resolved)
-    or_parts: List[Dict[str, Any]] = []
-    if eid:
-        or_parts.append({"metadata.event_type_id": eid})
-    if qv:
-        or_parts.append({"metadata.event_type": qv})
-    if not or_parts:
+    if not eid:
         return None
-    if len(or_parts) == 1:
-        return or_parts[0]
-    return {"$or": or_parts}
+    return {"metadata.event_type_id": eid}
 
 
 def recipient_metadata_filter(
@@ -171,17 +124,7 @@ def recipient_metadata_filter(
 ) -> Optional[Dict[str, Any]]:
     if not receiver or not str(receiver).strip():
         return None
-    labels = org_recipient_labels if org_recipient_labels is not None else _catalog_labels(catalog)
     rid = resolve_recipient_to_id(receiver, catalog)
-    resolved = resolve_sender(receiver, labels) or receiver.strip()
-    qv = sender_query_value(resolved)
-    or_parts: List[Dict[str, Any]] = []
-    if rid:
-        or_parts.append({"metadata.recipient_id": rid})
-    if qv:
-        or_parts.append({"metadata.recipient_name": qv})
-    if not or_parts:
+    if not rid:
         return None
-    if len(or_parts) == 1:
-        return or_parts[0]
-    return {"$or": or_parts}
+    return {"metadata.recipient_id": rid}

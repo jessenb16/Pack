@@ -54,9 +54,9 @@ def main() -> None:
         if not org_id:
             continue
         used_s, used_e, used_r = _used_ids_for_org(db, org_id)
-        senders = normalize_label_entries(row.get("senders") or row.get("sender_names") or [])
+        senders = normalize_label_entries(row.get("senders") or [])
         events = normalize_label_entries(row.get("event_types") or [])
-        recipients = normalize_label_entries(row.get("recipients") or row.get("recipient_names") or [])
+        recipients = normalize_label_entries(row.get("recipients") or [])
 
         u_s = _unused(senders, used_s)
         u_e = _unused(events, used_e)
