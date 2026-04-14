@@ -24,7 +24,6 @@ from app.services.label_catalog import (
     resolve_display_triple,
 )
 from app.services.org_settings import get_catalog_for_org
-from app.services.query_utils import event_metadata_filter, sender_metadata_filter
 from app.core.config import settings
 from pymongo.database import Database
 import logging
@@ -37,34 +36,6 @@ router = APIRouter()
 def allowed_file(filename: str) -> bool:
     """Check if file extension is allowed."""
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in settings.ALLOWED_EXTENSIONS
-
-
-def _infer_extracted_text_from_legacy(ai_ctx: Dict[str, Any], caption: str) -> str:
-    """Best-effort split when only legacy text_content (+ caption) exists."""
-    tc = (ai_ctx.get("text_content") or "").strip()
-    cap = (caption or "").strip()
-    if cap and tc.startswith(cap):
-        rest = tc[len(cap):].lstrip()
-        return rest.lstrip("\n").strip()
-    return tc
-
-
-def _ensure_ai_parts_with_db(doc: Dict[str, Any], db: Database) -> tuple[str, str, str]:
-    meta = doc.get("metadata") or {}
-    caption = (meta.get("caption") or "").strip()
-    ai_ctx = doc.get("ai_context") or {}
-    org = doc.get("org_id") or doc.get("family_id") or ""
-    extracted = (ai_ctx.get("extracted_text") or "").strip()
-    if not extracted:
-        extracted = _infer_extracted_text_from_legacy(ai_ctx, caption)
-    prefix = (ai_ctx.get("metadata_prefix") or "").strip()
-    if not prefix:
-        senders, events, recipients = get_catalog_for_org(org, db)
-        s, e, r = resolve_display_triple(meta, senders, events, recipients)
-        rlab = r["label"] if r else None
-        prefix = build_metadata_prefix(s["label"], e["label"], normalize_doc_date(str(meta.get("doc_date", ""))), rlab)
-    return extracted, caption, prefix
-
 
 def _doc_to_response(
     doc: Dict[str, Any],
@@ -155,9 +126,6 @@ def _apply_metadata_and_ai(
 async def get_documents(
     sender_id: Optional[str] = None,
     event_type_id: Optional[str] = None,
-    # TODO(legacy-catalog): remove sender / event_type string params after vault + clients use ids only
-    sender: Optional[str] = None,
-    event_type: Optional[str] = None,
     year: Optional[int] = None,
     current_user: dict = Depends(get_current_user_light),
     org_id: str = Depends(get_org_id_light),
@@ -165,24 +133,14 @@ async def get_documents(
 ):
     """Get documents with optional filtering (prefer sender_id / event_type_id)."""
     senders, events, recipients = get_catalog_for_org(org_id, db)
-    org_sender_labels = [e["label"] for e in senders if e.get("label")]
-    org_event_labels = [e["label"] for e in events if e.get("label")]
 
     parts: List[Dict[str, Any]] = [get_org_filter(org_id)]
 
     if sender_id:
         parts.append({"metadata.sender_id": sender_id})
-    elif sender:
-        sf = sender_metadata_filter(sender, senders, org_sender_labels)
-        if sf:
-            parts.append(sf)
 
     if event_type_id:
         parts.append({"metadata.event_type_id": event_type_id})
-    elif event_type:
-        ef = event_metadata_filter(event_type, events, org_event_labels)
-        if ef:
-            parts.append(ef)
 
     if year is not None:
         start_date = f"{year:04d}-01-01"
@@ -274,7 +232,11 @@ async def patch_document_metadata(
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
-    extracted, _old_caption, _old_prefix = _ensure_ai_parts_with_db(doc, db)
+    ai_ctx = doc.get("ai_context") or {}
+    extracted = ai_ctx.get("extracted_text")
+    if extracted is None:
+        extracted = ""
+    extracted = str(extracted)
     caption = body.caption.strip()
     metadata, ai_context = _apply_metadata_and_ai(
         org_id, db, sender_entry, event_entry, recipient_entry,

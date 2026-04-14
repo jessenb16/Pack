@@ -3,7 +3,7 @@ from typing import Optional, List, Dict, Any
 from pymongo.database import Database
 import logging
 
-from app.services.label_catalog import migrate_org_settings_document_shape, catalog_lists
+from app.services.label_catalog import catalog_lists
 
 logger = logging.getLogger(__name__)
 
@@ -12,7 +12,6 @@ def get_org_settings(org_id: str, db: Database) -> Dict[str, Any]:
     """
     Get organization settings for a given org_id.
     Creates default settings if they don't exist.
-    Migrates legacy string lists to [{id, label}] catalogs when present.
     """
     try:
         settings = db.org_settings.find_one({"_id": org_id})
@@ -27,8 +26,7 @@ def get_org_settings(org_id: str, db: Database) -> Dict[str, Any]:
             db.org_settings.insert_one(default_settings)
             return default_settings
 
-        migrate_org_settings_document_shape(org_id, db)
-        return db.org_settings.find_one({"_id": org_id}) or settings
+        return settings
     except Exception as e:
         logger.error(f"Error getting org settings: {e}")
         return {

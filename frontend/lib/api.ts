@@ -29,7 +29,7 @@ export interface LabelRef {
 export interface DocumentMetadataResponse {
   sender: LabelRef;
   event_type: LabelRef;
-  recipient?: LabelRef;
+  recipient: LabelRef | null;
   doc_date: string;
   caption?: string;
 }
@@ -116,15 +116,12 @@ class ApiClient {
 
   // Document endpoints
   async getDocuments(
-    // TODO(legacy-catalog): drop sender / event_type string filters once backend removes them
-    filters?: { sender_id?: string; event_type_id?: string; sender?: string; event_type?: string; year?: number },
+    filters?: { sender_id?: string; event_type_id?: string; year?: number },
     token?: string | null
   ) {
     const params = new URLSearchParams();
     if (filters?.sender_id) params.append('sender_id', filters.sender_id);
     if (filters?.event_type_id) params.append('event_type_id', filters.event_type_id);
-    if (filters?.sender) params.append('sender', filters.sender);
-    if (filters?.event_type) params.append('event_type', filters.event_type);
     if (filters?.year) params.append('year', filters.year.toString());
     
     const query = params.toString();

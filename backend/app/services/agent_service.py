@@ -17,7 +17,6 @@ from app.services.document_processor import create_embedding
 from app.services.storage import get_signed_url, extract_s3_key_from_url
 from app.services.label_catalog import (
     catalog_lists,
-    migrate_org_settings_document_shape,
     resolve_display_triple,
 )
 from app.services.query_utils import (
@@ -83,21 +82,16 @@ async def fetch_documents(
         return ("Security violation: No Organization ID found.", [])
 
     db = await get_database()
-    migrate_org_settings_document_shape(org_id, get_db())
     org_settings_doc = await db.org_settings.find_one({"_id": org_id})
     senders, org_event_entries, recipients = catalog_lists(org_settings_doc or {})
-    org_sender_labels = [e["label"] for e in senders if e.get("label")]
-    org_event_labels = [e["label"] for e in org_event_entries if e.get("label")]
-    org_recipient_labels = [e["label"] for e in recipients if e.get("label")]
 
-    # TODO(legacy-catalog): filters use query_utils helpers with $or on old string fields; id-only later
     parts: List[Dict[str, Any]] = [{"org_id": org_id}]
     if sender:
-        sf = sender_metadata_filter(sender, senders, org_sender_labels)
+        sf = sender_metadata_filter(sender, senders)
         if sf:
             parts.append(sf)
     if event_type:
-        ef = event_metadata_filter(event_type, org_event_entries, org_event_labels)
+        ef = event_metadata_filter(event_type, org_event_entries)
         if ef:
             parts.append(ef)
     if year:
@@ -110,7 +104,7 @@ async def fetch_documents(
             }
         })
     if receiver and receiver.strip():
-        rf = recipient_metadata_filter(receiver, recipients, org_recipient_labels)
+        rf = recipient_metadata_filter(receiver, recipients)
         if rf:
             parts.append(rf)
 
@@ -170,30 +164,25 @@ async def search_memory_contents(
         return ("Error: No organization context.", [])
 
     db = await get_database()
-    migrate_org_settings_document_shape(org_id, get_db())
     org_settings_doc = await db.org_settings.find_one({"_id": org_id})
     senders, org_event_entries, recipients = catalog_lists(org_settings_doc or {})
-    org_sender_labels = [e["label"] for e in senders if e.get("label")]
-    org_event_labels = [e["label"] for e in org_event_entries if e.get("label")]
-    org_recipient_labels = [e["label"] for e in recipients if e.get("label")]
 
     query_vector = create_embedding(query)
     if not query_vector:
         return ("Failed to generate embedding for query.", [])
 
     filter_doc = {"org_id": {"$eq": org_id}}
-    # TODO(legacy-catalog): same as fetch_documents — id-only post_match after migration verified
     post_parts: List[Dict[str, Any]] = []
     if sender:
-        sf = sender_metadata_filter(sender, senders, org_sender_labels)
+        sf = sender_metadata_filter(sender, senders)
         if sf:
             post_parts.append(sf)
     if event_type:
-        ef = event_metadata_filter(event_type, org_event_entries, org_event_labels)
+        ef = event_metadata_filter(event_type, org_event_entries)
         if ef:
             post_parts.append(ef)
     if receiver and receiver.strip():
-        rf = recipient_metadata_filter(receiver, recipients, org_recipient_labels)
+        rf = recipient_metadata_filter(receiver, recipients)
         if rf:
             post_parts.append(rf)
     if year:
@@ -373,7 +362,6 @@ async def execute_agent_query(
             prompt = system_prompt
             try:
                 db = await get_database()
-                migrate_org_settings_document_shape(org_id, get_db())
                 org_settings_doc = await db.org_settings.find_one({"_id": org_id})
                 senders, events, recipients = catalog_lists(org_settings_doc or {})
                 ev_l = [e["label"] for e in events if e.get("label")]
@@ -397,7 +385,6 @@ async def execute_agent_query(
         prompt = system_prompt
         try:
             db = await get_database()
-            migrate_org_settings_document_shape(org_id, get_db())
             org_settings_doc = await db.org_settings.find_one({"_id": org_id})
             senders, events, recipients = catalog_lists(org_settings_doc or {})
             ev_l = [e["label"] for e in events if e.get("label")]

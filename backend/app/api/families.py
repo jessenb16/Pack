@@ -30,7 +30,6 @@ async def get_my_family(
 ):
     """Get current user's organization (family) from Clerk."""
     org_id = current_user.get("org_id")
-    
     if not org_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

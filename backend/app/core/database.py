@@ -59,12 +59,20 @@ def _create_indexes(db: Database):
         db.documents.create_index("metadata.event_type_id")
         db.documents.create_index("metadata.recipient_id")
         
-        # Index on org_settings _id (already indexed as _id, but explicit is good)
-        db.org_settings.create_index("_id")
+        # Enforce catalog uniqueness (no duplicate label_cf within a catalog array).
+        # These should fail loudly if there are duplicates, permissions issues, or
+        # conflicting pre-existing index definitions.
+        for name, keys in [
+            ("org_settings_senders_label_cf_unique", [("_id", 1), ("senders.label_cf", 1)]),
+            ("org_settings_event_types_label_cf_unique", [("_id", 1), ("event_types.label_cf", 1)]),
+            ("org_settings_recipients_label_cf_unique", [("_id", 1), ("recipients.label_cf", 1)]),
+        ]:
+            db.org_settings.create_index(keys, name=name, unique=True, sparse=True)
         
         logger.info("Database indexes created successfully")
     except Exception as e:
-        logger.warning(f"Could not create indexes (may already exist): {e}")
+        logger.error(f"Database index creation failed: {e}")
+        raise
 
 
 def get_org_filter(org_id: str) -> dict:

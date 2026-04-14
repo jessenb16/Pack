@@ -2,8 +2,8 @@
 """
 Migrate legacy string metadata + org_settings to UUID label catalogs and document ids.
 
-Still reads metadata.sender_name / event_type / recipient_name so pre-migration DBs backfill correctly.
-After all envs are migrated, grep TODO(legacy-catalog) in app code to drop compat paths.
+NOTE: This script exists for one-time migrations only. It supports legacy fields
+from pre-ids versions of Pack.
 
 Usage (from repo root):
   cd backend && python -m scripts.migrate_label_catalog
@@ -31,8 +31,64 @@ from app.services.label_catalog import (  # noqa: E402
     build_metadata_prefix,
     compose_ai_text_content,
     normalize_doc_date,
-    normalize_label_entries,
 )
+
+
+def _label_cf(label: str) -> str:
+    return str(label).strip().casefold()
+
+
+def _normalize_catalog_mixed(raw: Any) -> List[Dict[str, str]]:
+    """
+    Accept pre-migration org_settings catalogs:
+    - list[str] (legacy)
+    - list[{"id","label"}] (partial)
+    - list[{"id","label","label_cf"}] (current)
+    Returns normalized entries with {id,label,label_cf}.
+    Raises if duplicates exist with conflicting ids/sources, since silently
+    dropping one could orphan documents that reference the dropped id.
+    """
+    if not raw:
+        return []
+    if not isinstance(raw, list):
+        raise ValueError("org_settings catalog has invalid shape (expected list)")
+    out: List[Dict[str, str]] = []
+    seen_id_by_cf: dict[str, str] = {}
+    for e in raw:
+        if isinstance(e, str):
+            lab = e.strip()
+            if not lab:
+                continue
+            cf = _label_cf(lab)
+            if cf in seen_id_by_cf:
+                continue
+            seen_id_by_cf[cf] = ""  # "string source" sentinel
+            out.append({"id": str(uuid4()), "label": lab, "label_cf": cf})
+            continue
+        if isinstance(e, dict):
+            lid = e.get("id")
+            lab = e.get("label")
+            if not (lid and lab is not None and str(lab).strip()):
+                continue
+            lid_s = str(lid)
+            lab_s = str(lab).strip()
+            cf = str(e.get("label_cf") or "").strip()
+            expected = _label_cf(lab_s)
+            if cf and cf != expected:
+                raise ValueError("org_settings catalogs contain inconsistent label_cf; run scripts.backfill_label_cf")
+            cf = cf or expected
+            prev = seen_id_by_cf.get(cf)
+            if prev is not None and prev != lid_s:
+                raise ValueError(
+                    "org_settings catalog contains duplicate normalized label with conflicting ids. "
+                    f"label={lab_s!r} label_cf={cf!r} existing_id={prev!r} current_id={lid_s!r}. "
+                    "Resolve duplicate catalog entries before running scripts.migrate_label_catalog."
+                )
+            seen_id_by_cf[cf] = lid_s
+            out.append({"id": lid_s, "label": lab_s, "label_cf": cf})
+            continue
+        raise ValueError("org_settings catalog contains invalid entry type; run scripts.migrate_label_catalog")
+    return out
 
 
 def _infer_extracted(ai_ctx: Dict[str, Any], caption: str) -> str:
@@ -56,22 +112,22 @@ def _collect_org_ids(db) -> List[str]:
 
 
 def _merge_catalog(
-    existing: List[Dict[str, str]],
+    existing: Any,
     labels_seen: List[str],
 ) -> Tuple[List[Dict[str, str]], Dict[str, str]]:
     """Return (catalog_entries, casefold_key -> id)."""
-    entries = normalize_label_entries(existing)
+    entries = _normalize_catalog_mixed(existing)
     by_cf: Dict[str, Dict[str, str]] = {}
     for e in entries:
-        cf = str(e["label"]).strip().casefold()
+        cf = e["label_cf"]
         by_cf[cf] = e
 
     for lab in labels_seen:
         if not lab or not str(lab).strip():
             continue
-        cf = str(lab).strip().casefold()
+        cf = _label_cf(str(lab).strip())
         if cf not in by_cf:
-            e = {"id": str(uuid4()), "label": str(lab).strip()}
+            e = {"id": str(uuid4()), "label": str(lab).strip(), "label_cf": cf}
             by_cf[cf] = e
             entries.append(e)
 
@@ -107,9 +163,9 @@ def main() -> None:
         cur_e = settings_doc.get("event_types") or []
         cur_r = settings_doc.get("recipients") or settings_doc.get("recipient_names") or []
 
-        senders, sender_map = _merge_catalog(normalize_label_entries(cur_s), senders_labels)
-        events, event_map = _merge_catalog(normalize_label_entries(cur_e), events_labels)
-        recipients, recipient_map = _merge_catalog(normalize_label_entries(cur_r), recipients_labels)
+        senders, sender_map = _merge_catalog(cur_s, senders_labels)
+        events, event_map = _merge_catalog(cur_e, events_labels)
+        recipients, recipient_map = _merge_catalog(cur_r, recipients_labels)
 
         db.org_settings.update_one(
             {"_id": org_id},
@@ -133,15 +189,15 @@ def main() -> None:
 
             sid = m.get("sender_id")
             if not sid and m.get("sender_name"):
-                cf = str(m["sender_name"]).strip().casefold()
+                cf = _label_cf(str(m["sender_name"]))
                 sid = sender_map.get(cf)
             eid = m.get("event_type_id")
             if not eid and m.get("event_type"):
-                cf = str(m["event_type"]).strip().casefold()
+                cf = _label_cf(str(m["event_type"]))
                 eid = event_map.get(cf)
             rid = m.get("recipient_id")
             if not rid and m.get("recipient_name"):
-                cf = str(m["recipient_name"]).strip().casefold()
+                cf = _label_cf(str(m["recipient_name"]))
                 rid = recipient_map.get(cf)
 
             sender_label = m.get("sender_name") or ""
