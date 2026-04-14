@@ -98,11 +98,18 @@ def ensure_label(org_id: str, kind: str, label: Optional[str], db: Database) -> 
     # Atomic: only append if no entry with this label_cf exists.
     new_entry = {"id": str(uuid4()), "label": label_clean, "label_cf": label_cf}
     update_filter = {"_id": org_id, f"{field}.label_cf": {"$ne": label_cf}}
+    # Important: MongoDB disallows updating the same path with multiple operators
+    # in a single update. If we are $push-ing into `field`, we must not also
+    # $setOnInsert that same `field` in the upsert.
+    set_on_insert = {"_id": org_id}
+    for f in ("senders", "event_types", "recipients"):
+        if f != field:
+            set_on_insert[f] = []
     try:
         res = db.org_settings.update_one(
             update_filter,
             {
-                "$setOnInsert": {"_id": org_id, "senders": [], "event_types": [], "recipients": []},
+                "$setOnInsert": set_on_insert,
                 "$push": {field: new_entry},
             },
             upsert=True,
