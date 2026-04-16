@@ -1,5 +1,5 @@
 """Documents API endpoints."""
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, Body
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, Body, BackgroundTasks
 from bson import ObjectId
 from datetime import datetime, timezone
 from typing import Optional, List, Any, Dict
@@ -12,6 +12,9 @@ from app.models.document import DocumentResponse, DocumentMetadataPatch
 from app.models.document import LabelRef, DocumentMetadata
 from app.services.storage import upload_to_s3, delete_from_s3, get_signed_url, extract_s3_key_from_url
 from app.services.document_processor import process_document, text_to_pdf, _sanitize_filename, create_embedding
+from app.services.user_settings import get_document_uploaded_email_disabled
+from app.services.email_client import send_email, EmailSendError
+from app.services.notification_emails import build_document_uploaded_email
 from app.services.label_catalog import (
     KIND_SENDER,
     KIND_EVENT,
@@ -24,6 +27,7 @@ from app.services.label_catalog import (
     resolve_display_triple,
 )
 from app.services.org_settings import get_catalog_for_org
+from app.core.clerk_org import get_organization_members
 from app.core.config import settings
 from pymongo.database import Database
 import logging
@@ -120,6 +124,80 @@ def _apply_metadata_and_ai(
         "embedding": embedding,
     }
     return metadata, ai_context
+
+
+def _send_document_uploaded_emails_background(
+    *,
+    org_id: str,
+    document_id: str,
+    uploader_id: str,
+    db: Database,
+) -> None:
+    """
+    Best-effort immediate notification emails.
+    Runs in a BackgroundTask so it must not raise.
+    """
+    try:
+        doc = db.documents.find_one({"_id": ObjectId(document_id)})
+        if not doc:
+            logger.warning("Notification: document not found: %s", document_id)
+            return
+
+        senders, events, recipients = get_catalog_for_org(org_id, db)
+        s, e, r = resolve_display_triple(doc.get("metadata") or {}, senders, events, recipients)
+
+        meta = doc.get("metadata") or {}
+        caption = str(meta.get("caption") or "").strip()
+        doc_date = str(meta.get("doc_date") or "").strip()
+
+        memberships = get_organization_members(org_id, bypass_cache=False)
+
+        uploader_name = "Someone"
+        member_targets: list[str] = []
+
+        for membership in memberships:
+            pud = membership.get("public_user_data") or {}
+            member_user_id = pud.get("user_id") or ""
+            email = (pud.get("identifier") or "").strip()
+            first = pud.get("first_name") or ""
+            last = pud.get("last_name") or ""
+            name = f"{first} {last}".strip() or email or member_user_id or "User"
+
+            if member_user_id == uploader_id:
+                uploader_name = name
+                continue  # exclude uploader
+            if not member_user_id or not email:
+                continue
+            if get_document_uploaded_email_disabled(
+                org_id=org_id, clerk_user_id=member_user_id, db=db
+            ):
+                continue
+            member_targets.append(email)
+
+        if not member_targets:
+            return
+
+        base = (settings.FRONTEND_URL or "").rstrip("/")
+        dashboard_url = f"{base}/dashboard?focus={document_id}"
+        subject, html, text = build_document_uploaded_email(
+            uploader_name=uploader_name,
+            dashboard_url=dashboard_url,
+            caption=caption,
+            doc_date=doc_date,
+            sender_label=s.get("label") if s else None,
+            event_label=e.get("label") if e else None,
+            recipient_label=r.get("label") if r else None,
+        )
+
+        for email in member_targets:
+            try:
+                send_email(to=[email], subject=subject, html=html, text=text)
+            except EmailSendError as err:
+                logger.error("Notification email failed to %s: %s", email, err)
+            except Exception as err:
+                logger.error("Notification email unexpected error to %s: %s", email, err)
+    except Exception as err:
+        logger.error("Notification background task failed: %s", err)
 
 
 @router.get("", response_model=List[DocumentResponse])
@@ -265,6 +343,7 @@ async def upload_document(
     custom_filename: Optional[str] = Form(None),
     text: Optional[str] = Form(None),
     file: Optional[UploadFile] = File(None),
+    background_tasks: BackgroundTasks = None,
     current_user: dict = Depends(get_current_user_light),
     org_id: str = Depends(get_org_id_light),
     db: Database = Depends(get_db),
@@ -374,6 +453,20 @@ async def upload_document(
         doc_id = db.documents.insert_one(document).inserted_id
         saved = db.documents.find_one({"_id": doc_id})
         senders, events, recipients = get_catalog_for_org(org_id, db)
+
+        # Best-effort: notify other members by email without blocking the response.
+        try:
+            if background_tasks is not None and saved:
+                background_tasks.add_task(
+                    _send_document_uploaded_emails_background,
+                    org_id=org_id,
+                    document_id=str(doc_id),
+                    uploader_id=str(current_user.get("clerk_user_id") or ""),
+                    db=db,
+                )
+        except Exception as e:
+            logger.error("Failed to enqueue notification background task: %s", e)
+
         return _doc_to_response(saved, db, senders, events, recipients)
 
     except HTTPException:

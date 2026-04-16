@@ -394,7 +394,7 @@ export default function UploadPage() {
               Caption <span className="text-red-600">*</span>
             </label>
             <textarea
-              placeholder="Describe your document in one or two sentences. This helps the family find it later."
+              placeholder="Describe your document in one or two sentences. This helps your Pack find it later."
               value={formData.caption}
               onChange={(e) => setFormData({ ...formData, caption: e.target.value })}
               className="w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-red-900 focus:outline-none focus:ring-2 focus:ring-red-900 min-h-[80px] resize-y"

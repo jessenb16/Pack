@@ -145,6 +145,19 @@ export default function DashboardPage() {
           return dateStr === todayStr;
         });
         setOnThisDay(onThisDayDocs);
+
+        // If we were linked here with ?focus=<document_id>, open that doc.
+        if (typeof window !== 'undefined') {
+          const focusId = new URLSearchParams(window.location.search).get('focus');
+          if (focusId) {
+            const focused = docs.find((d) => d.id === focusId);
+            if (focused) {
+              setSelectedDoc(focused);
+              // Best-effort: bring the user to the top of the page content.
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+          }
+        }
       }
     } catch (error) {
       console.error('Error loading dashboard:', error);
@@ -267,9 +280,9 @@ export default function DashboardPage() {
                   <Users className="h-6 w-6 text-amber-700" />
                 </div>
                 <div>
-                  <h2 className="text-2xl font-bold text-gray-900">Create Your Family Organization</h2>
+                  <h2 className="text-2xl font-bold text-gray-900">Create Your Pack</h2>
                   <p className="text-gray-600">
-                    Create a family organization to start organizing your memories and inviting family members.
+                    Create a Pack to start organizing your memories and inviting members.
                   </p>
                 </div>
               </div>
@@ -277,7 +290,7 @@ export default function DashboardPage() {
                 href="/family-setup"
                 className="flex items-center gap-2 rounded-lg bg-red-900 px-6 py-3 text-white transition-all hover:bg-red-800 shadow-sm"
               >
-                <span>Create Family</span>
+                <span>Create Pack</span>
                 <ArrowRight className="h-5 w-5" />
               </Link>
             </div>
@@ -297,7 +310,7 @@ export default function DashboardPage() {
                   <span>
                     {members.length === 1
                       ? "You're the only member."
-                      : `${members.length} family members`}
+                      : `${members.length} pack members`}
                   </span>
                   {atMemberLimit && (
                     <span className="text-xs text-gray-500">Member limit reached</span>
