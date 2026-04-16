@@ -86,7 +86,7 @@ def build_document_uploaded_email(
       </div>
 
       <div style="padding:12px 18px; background:#fcfcfd; border-top:1px solid #eef2f7; font-size:12px; color:#6b7280; line-height:1.4;">
-        To stop these emails, open Pack and go to <strong>Family Settings</strong> → <strong>Notifications</strong>.
+        To stop these emails, open Pack and go to <strong>Settings</strong> → <strong>Notifications</strong>.
       </div>
     </div>
     <div style="margin-top:14px; font-size:12px; color:#9ca3af; text-align:center;">
@@ -104,7 +104,7 @@ def build_document_uploaded_email(
         f"Event: {event_label or '—'}\\n"
         f"Recipient: {recipient_label or '—'}\\n\\n"
         f"View in Pack: {dashboard_url}\\n\\n"
-        f"To stop these emails, open Pack and go to Family Settings → Notifications."
+        f"To stop these emails, open Pack and go to Settings → Notifications."
     )
 
     return subject, html, text
