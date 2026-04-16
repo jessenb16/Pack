@@ -92,6 +92,13 @@ def _create_indexes(db: Database):
                         break
                 if not ok:
                     raise
+
+        # User notification settings: one row per (org_id, clerk_user_id)
+        db.user_settings.create_index(
+            [("org_id", 1), ("clerk_user_id", 1)],
+            name="user_settings_org_user_unique",
+            unique=True,
+        )
         
         logger.info("Database indexes created successfully")
     except Exception as e:

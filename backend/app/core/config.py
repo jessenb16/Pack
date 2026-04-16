@@ -42,6 +42,10 @@ class Settings(BaseSettings):
     
     # Frontend
     FRONTEND_URL: str = os.getenv("FRONTEND_URL", "http://localhost:3000")
+
+    # Email (Resend)
+    RESEND_API_KEY: str = os.getenv("RESEND_API_KEY", "")
+    EMAIL_FROM: str = os.getenv("EMAIL_FROM", "")
     
     class Config:
         env_file = ".env"

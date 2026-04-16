@@ -119,6 +119,7 @@ export default function DocumentViewer({
         setContentLoaded(false);
         setScale(1);
         setShowDeleteConfirm(false);
+        setIsDeleting(false);
         setShowEdit(false);
       });
     }
@@ -139,6 +140,11 @@ export default function DocumentViewer({
     setIsDeleting(true);
     try {
       await onDelete(doc.id);
+      // Parent typically clears the selected doc after deletion; ensure our
+      // local delete state doesn't leak to the next opened document.
+      setIsDeleting(false);
+      setShowDeleteConfirm(false);
+      onClose();
     } catch (error) {
       console.error('Error deleting document:', error);
       setIsDeleting(false);

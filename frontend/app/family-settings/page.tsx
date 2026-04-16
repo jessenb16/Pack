@@ -30,6 +30,9 @@ export default function FamilySettingsPage() {
   const profileInputRef = useRef<HTMLInputElement | null>(null);
   const [profileUploading, setProfileUploading] = useState(false);
   const [profileError, setProfileError] = useState<string | null>(null);
+  const [docUploadEmailEnabled, setDocUploadEmailEnabled] = useState(true);
+  const [notifLoading, setNotifLoading] = useState(false);
+  const [notifError, setNotifError] = useState<string | null>(null);
   const memberLimit = 5;
   const atMemberLimit = members.length >= memberLimit;
 
@@ -87,7 +90,50 @@ export default function FamilySettingsPage() {
         setLoading(false);
       }
     }
-  }, [getToken, orgId, bypassMembersCacheUntil]);
+  }, [getToken, orgId, bypassMembersCacheUntil, router]);
+
+  const loadNotificationSettings = useCallback(async () => {
+    if (!orgId) return;
+    setNotifError(null);
+    setNotifLoading(true);
+    try {
+      const token = await getToken({ organizationId: orgId || undefined });
+      if (!token) throw new Error('Failed to get authentication token');
+      const resp = await apiClient.getNotificationSettings(token);
+      if (resp.data) {
+        setDocUploadEmailEnabled(!!resp.data.document_uploaded_email_enabled);
+      } else if (resp.error) {
+        setNotifError(resp.error);
+      }
+    } catch (e) {
+      setNotifError(e instanceof Error ? e.message : 'Failed to load notification settings');
+    } finally {
+      setNotifLoading(false);
+    }
+  }, [getToken, orgId]);
+
+  const saveNotificationSettings = useCallback(async (enabled: boolean) => {
+    if (!orgId) return;
+    setNotifError(null);
+    setNotifLoading(true);
+    try {
+      const token = await getToken({ organizationId: orgId || undefined });
+      if (!token) throw new Error('Failed to get authentication token');
+      const resp = await apiClient.patchNotificationSettings(
+        { document_uploaded_email_enabled: enabled },
+        token
+      );
+      if (resp.data) {
+        setDocUploadEmailEnabled(!!resp.data.document_uploaded_email_enabled);
+      } else if (resp.error) {
+        setNotifError(resp.error);
+      }
+    } catch (e) {
+      setNotifError(e instanceof Error ? e.message : 'Failed to save notification settings');
+    } finally {
+      setNotifLoading(false);
+    }
+  }, [getToken, orgId]);
 
   useEffect(() => {
     if (!isLoaded) return;
@@ -102,7 +148,8 @@ export default function FamilySettingsPage() {
       return;
     }
     loadFamilyData();
-  }, [user, isLoaded, orgId, router, loadFamilyData]);
+    loadNotificationSettings();
+  }, [user, isLoaded, orgId, router, loadFamilyData, loadNotificationSettings]);
 
   useEffect(() => {
     if (!user) return;
@@ -225,7 +272,7 @@ export default function FamilySettingsPage() {
       <div className="min-h-screen bg-gray-50">
         <Navbar />
         <main className="container mx-auto px-4 py-8">
-          <p className="text-gray-600">You need to create a family first.</p>
+          <p className="text-gray-600">You need to create a Pack first.</p>
         </main>
       </div>
     );
@@ -236,7 +283,7 @@ export default function FamilySettingsPage() {
       <Navbar />
       
       <main className="container mx-auto max-w-4xl px-4 py-8">
-        <h1 className="mb-8 text-3xl font-bold text-gray-800">Family Settings</h1>
+        <h1 className="mb-8 text-3xl font-bold text-gray-800">Pack Settings</h1>
         
         {loading && (
           <div className="mb-4 flex items-center justify-center">
@@ -245,12 +292,12 @@ export default function FamilySettingsPage() {
           </div>
         )}
 
-        {/* Family Info */}
+        {/* Pack Info */}
         <section className="mb-8 rounded-xl bg-white border border-gray-200 p-6 shadow-sm">
-          <h2 className="mb-4 text-xl font-semibold text-gray-800">Family Information</h2>
+          <h2 className="mb-4 text-xl font-semibold text-gray-800">Pack Information</h2>
           <div className="space-y-3 rounded-lg bg-blue-50/50 p-4">
             <p className="text-gray-700">
-              <span className="font-semibold text-gray-900">Family Name:</span> {typeof family.name === 'string' ? family.name : String(family.name ?? '')}
+              <span className="font-semibold text-gray-900">Pack Name:</span> {typeof family.name === 'string' ? family.name : String(family.name ?? '')}
             </p>
             <p className="text-gray-700">
               <span className="font-semibold text-gray-900">Created:</span>{' '}
@@ -302,11 +349,49 @@ export default function FamilySettingsPage() {
           </div>
         </section>
 
-        {/* Family Members */}
+        {/* Notifications */}
+        <section className="mb-8 rounded-xl bg-white border border-gray-200 p-6 shadow-sm">
+          <h2 className="mb-4 text-xl font-semibold text-gray-800">Notifications</h2>
+          <div className="flex flex-col gap-3 rounded-lg bg-gray-50/50 p-4">
+            <div className="flex items-center justify-between gap-4">
+              <div className="min-w-0">
+                <p className="font-medium text-gray-900">Email me when someone uploads a document</p>
+                <p className="text-sm text-gray-600">
+                  You&apos;ll get an email for new uploads in this pack (excluding your own uploads).
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => void saveNotificationSettings(!docUploadEmailEnabled)}
+                disabled={notifLoading}
+                className={`relative inline-flex h-7 w-12 flex-shrink-0 items-center rounded-full transition-colors ${
+                  docUploadEmailEnabled ? 'bg-emerald-600' : 'bg-gray-300'
+                } ${notifLoading ? 'opacity-60 cursor-not-allowed' : ''}`}
+                aria-pressed={docUploadEmailEnabled}
+                aria-label="Toggle document upload emails"
+              >
+                <span
+                  className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${
+                    docUploadEmailEnabled ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </div>
+            {notifError && <p className="text-sm text-red-600">{notifError}</p>}
+            {notifLoading && (
+              <div className="flex items-center gap-2 text-sm text-gray-600">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Saving…
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* Pack Members */}
         <section className="mb-8 rounded-xl bg-white border border-gray-200 p-6 shadow-sm">
           <div className="mb-4 flex items-center gap-2">
             <Users className="h-5 w-5 text-teal-600" />
-            <h2 className="text-xl font-semibold text-gray-800">Family Members</h2>
+            <h2 className="text-xl font-semibold text-gray-800">Pack Members</h2>
           </div>
           {members.length === 0 ? (
             <div className="rounded-lg border border-dashed border-gray-200 bg-gray-50 p-8 text-center">
@@ -335,7 +420,7 @@ export default function FamilySettingsPage() {
         <section id="invite-family" className="mb-8 rounded-xl bg-white border border-gray-200 p-6 shadow-sm scroll-mt-24">
           <div className="mb-4 flex items-center gap-2">
             <Mail className="h-5 w-5 text-rose-600" />
-            <h2 className="text-xl font-semibold text-gray-800">Invite Family Members</h2>
+            <h2 className="text-xl font-semibold text-gray-800">Invite Pack Members</h2>
           </div>
           
           {message && (
@@ -363,7 +448,7 @@ export default function FamilySettingsPage() {
                 id="invite_email"
                 value={inviteEmail}
                 onChange={(e) => setInviteEmail(e.target.value)}
-                placeholder="family.member@example.com"
+                placeholder="pack.member@example.com"
                 className="w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-red-900 focus:outline-none focus:ring-2 focus:ring-red-900"
                 required
                 disabled={sending || atMemberLimit}

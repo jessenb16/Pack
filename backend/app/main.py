@@ -19,6 +19,7 @@ _origins = [
     "http://192.168.0.151:3000",
     "http://192.168.1.91:3000",  # Local network
     "https://pack-wine.vercel.app",  # Production (Vercel)
+    "https://packarchive.com",  # Production (custom domain)
     os.getenv("FRONTEND_URL", "http://localhost:3000"),
 ]
 app.add_middleware(
@@ -45,13 +46,14 @@ async def health():
     }
 
 # Import routers
-from app.api import auth, families, documents, chat, webhooks
+from app.api import auth, families, documents, chat, webhooks, settings
 
 app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
 app.include_router(families.router, prefix="/api/families", tags=["families"])
 app.include_router(documents.router, prefix="/api/documents", tags=["documents"])
 app.include_router(chat.router, prefix="/api/chat", tags=["chat"])
 app.include_router(webhooks.router, prefix="/api/webhooks", tags=["webhooks"])
+app.include_router(settings.router, prefix="/api/settings", tags=["settings"])
 
 if __name__ == "__main__":
     import uvicorn

@@ -98,6 +98,8 @@ jobs:
           LANGSMITH_ENDPOINT: ${{ vars.LANGSMITH_ENDPOINT }}
           LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
           LANGSMITH_PROJECT: ${{ vars.LANGSMITH_PROJECT }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          EMAIL_FROM: ${{ vars.EMAIL_FROM }}
         run: |
           python3 << 'PY' > containers.json
           import os, json
@@ -105,7 +107,8 @@ jobs:
             "MONGODB_URI", "DATABASE_NAME", "CLERK_SECRET_KEY", "CLERK_WEBHOOK_SECRET",
             "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY", "OPENAI_API_KEY", "AWS_ACCESS_KEY_ID",
             "AWS_SECRET_ACCESS_KEY", "AWS_S3_BUCKET_NAME", "AWS_REGION", "FRONTEND_URL",
-            "LANGSMITH_TRACING_V2", "LANGSMITH_ENDPOINT", "LANGSMITH_API_KEY", "LANGSMITH_PROJECT"
+            "LANGSMITH_TRACING_V2", "LANGSMITH_ENDPOINT", "LANGSMITH_API_KEY", "LANGSMITH_PROJECT",
+            "RESEND_API_KEY", "EMAIL_FROM"
           ]
           env = {k: os.environ[k] for k in keys if os.environ.get(k)}
           name = os.environ["CONTAINER_NAME"]

@@ -45,6 +45,10 @@ export interface DocumentApiRecord {
   created_at: string;
 }
 
+export interface NotificationSettingsResponse {
+  document_uploaded_email_enabled: boolean;
+}
+
 class ApiClient {
   private baseUrl: string;
 
@@ -269,6 +273,21 @@ class ApiClient {
   async revokeInvitation(invitationId: string, token?: string | null) {
     return this.request<{ message: string }>(`/api/families/invitations/${invitationId}/revoke`, {
       method: 'POST',
+    }, token);
+  }
+
+  // Settings endpoints
+  async getNotificationSettings(token?: string | null) {
+    return this.request<NotificationSettingsResponse>('/api/settings/notifications', {}, token);
+  }
+
+  async patchNotificationSettings(
+    payload: NotificationSettingsResponse,
+    token?: string | null
+  ) {
+    return this.request<NotificationSettingsResponse>('/api/settings/notifications', {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
     }, token);
   }
 }
