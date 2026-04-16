@@ -20,6 +20,7 @@ _origins = [
     "http://192.168.1.91:3000",  # Local network
     "https://pack-wine.vercel.app",  # Production (Vercel)
     "https://packarchive.com",  # Production (custom domain)
+    "https://www.packarchive.com",  # Production (custom domain)
     os.getenv("FRONTEND_URL", "http://localhost:3000"),
 ]
 app.add_middleware(
