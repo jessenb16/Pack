@@ -18,6 +18,39 @@ export default function Navbar() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const lastNameCleanupStateRef = useRef<'idle' | 'inFlight' | 'done'>('idle');
+
+  useEffect(() => {
+    lastNameCleanupStateRef.current = 'idle';
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!isLoaded || !user) return;
+    if (lastNameCleanupStateRef.current !== 'idle') return;
+
+    const packLastNameSet = (user.unsafeMetadata as Record<string, unknown> | null | undefined)?.packLastNameSet === true;
+    const lastName = (user.lastName ?? '').trim();
+    if (packLastNameSet || !lastName) return;
+
+    const isGoogle = (user.externalAccounts ?? []).some((acct) => {
+      const anyAcct = acct as unknown as { provider?: string; providerName?: string; provider_name?: string };
+      const provider = (anyAcct.provider || anyAcct.providerName || anyAcct.provider_name || '').toLowerCase();
+      return provider.includes('google');
+    });
+    if (!isGoogle) return;
+
+    lastNameCleanupStateRef.current = 'inFlight';
+    void (async () => {
+      try {
+        await user.update({ lastName: null });
+        lastNameCleanupStateRef.current = 'done';
+      } catch (err) {
+        lastNameCleanupStateRef.current = 'idle';
+        // eslint-disable-next-line no-console
+        console.warn('Failed clearing google-provided lastName:', err);
+      }
+    })();
+  }, [isLoaded, user]);
 
   // Close on Escape key
   useEffect(() => {

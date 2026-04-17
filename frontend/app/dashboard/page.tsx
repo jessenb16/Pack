@@ -56,9 +56,14 @@ export default function DashboardPage() {
     setNameError(null);
     setNameSaving(true);
     try {
+      const last = nameForm.lastName.trim();
       await user.update({
         firstName: nameForm.firstName.trim(),
-        lastName: nameForm.lastName.trim() || undefined,
+        lastName: last || null,
+        unsafeMetadata: {
+          ...(user.unsafeMetadata ?? {}),
+          packLastNameSet: Boolean(last),
+        },
       });
     } catch (err) {
       setNameError(err instanceof Error ? err.message : 'Failed to save name');
@@ -155,6 +160,19 @@ export default function DashboardPage() {
               setSelectedDoc(focused);
               // Best-effort: bring the user to the top of the page content.
               window.scrollTo({ top: 0, behavior: 'smooth' });
+            } else {
+              // Fallback: if the focused doc isn't in the recent list, fetch it by id.
+              try {
+                const focusedRes = await apiClient.getDocument(focusId, token);
+                if (focusedRes.data) {
+                  setSelectedDoc(focusedRes.data);
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                } else if (focusedRes.error) {
+                  console.error('Error loading focused document:', focusedRes.error);
+                }
+              } catch (err) {
+                console.error('Error loading focused document:', err);
+              }
             }
           }
         }
