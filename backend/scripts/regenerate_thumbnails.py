@@ -22,7 +22,7 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Tuple
 
 # Allow `python scripts/regenerate_thumbnails.py` from backend/
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent
@@ -132,6 +132,7 @@ def main() -> int:
                 Bucket=settings.AWS_S3_BUCKET_NAME,
                 Key=thumbnail_key,
                 Body=thumb_bytes,
+                ContentType="image/jpeg",
             )
             print(f"[apply] overwrote thumbnail object at existing key: {thumbnail_key}")
         else:

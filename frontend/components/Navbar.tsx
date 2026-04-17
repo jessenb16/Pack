@@ -21,6 +21,10 @@ export default function Navbar() {
   const lastNameCleanupStateRef = useRef<'idle' | 'inFlight' | 'done'>('idle');
 
   useEffect(() => {
+    lastNameCleanupStateRef.current = 'idle';
+  }, [user?.id]);
+
+  useEffect(() => {
     if (!isLoaded || !user) return;
     if (lastNameCleanupStateRef.current !== 'idle') return;
 
