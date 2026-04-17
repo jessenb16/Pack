@@ -29,6 +29,8 @@ export default function FamilySettingsPage() {
   const lastImageUrlRef = useRef<string | null>(null);
   const getTokenRef = useRef(getToken);
   const orgIdRef = useRef(orgId);
+  getTokenRef.current = getToken;
+  orgIdRef.current = orgId;
   const profileInputRef = useRef<HTMLInputElement | null>(null);
   const [profileUploading, setProfileUploading] = useState(false);
   const [profileError, setProfileError] = useState<string | null>(null);
@@ -37,11 +39,6 @@ export default function FamilySettingsPage() {
   const [notifError, setNotifError] = useState<string | null>(null);
   const memberLimit = 5;
   const atMemberLimit = members.length >= memberLimit;
-
-  useEffect(() => {
-    getTokenRef.current = getToken;
-    orgIdRef.current = orgId;
-  }, [getToken, orgId]);
 
   const loadFamilyData = useCallback(async (bustMembersCache = false, showLoading = true) => {
     try {

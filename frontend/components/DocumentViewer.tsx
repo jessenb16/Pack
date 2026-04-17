@@ -74,9 +74,7 @@ export default function DocumentViewer({
   );
 
   const onCloseRef = useRef(onClose);
-  useEffect(() => {
-    onCloseRef.current = onClose;
-  }, [onClose]);
+  onCloseRef.current = onClose;
 
   const resetEditForm = useCallback(() => {
     if (!doc) return;
