@@ -2,7 +2,7 @@
 
 import { X, ZoomIn, Download, Trash2, Loader2, Pencil } from 'lucide-react';
 import { formatDocDate } from '@/lib/date';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiClient, type DocumentApiRecord } from '@/lib/api';
 
 export type DocumentViewerDocument = DocumentApiRecord;
@@ -73,6 +73,11 @@ export default function DocumentViewer({
       onDocumentUpdated
   );
 
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
   const resetEditForm = useCallback(() => {
     if (!doc) return;
     const m = doc.metadata;
@@ -104,30 +109,28 @@ export default function DocumentViewer({
     if (showEdit && doc) resetEditForm();
   }, [showEdit, doc, resetEditForm]);
 
-  const handleEscape = useCallback(
-    (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    },
-    [onClose]
-  );
+  const handleEscape = useCallback((e: KeyboardEvent) => {
+    if (e.key === 'Escape') onCloseRef.current();
+  }, []);
 
   useEffect(() => {
-    if (isOpen) {
-      document.body.style.overflow = 'hidden';
-      window.addEventListener('keydown', handleEscape);
-      queueMicrotask(() => {
-        setContentLoaded(false);
-        setScale(1);
-        setShowDeleteConfirm(false);
-        setIsDeleting(false);
-        setShowEdit(false);
-      });
-    }
+    if (!isOpen) return;
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', handleEscape);
     return () => {
       document.body.style.overflow = 'unset';
       window.removeEventListener('keydown', handleEscape);
     };
-  }, [isOpen, handleEscape, doc?.id]);
+  }, [isOpen, handleEscape]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setContentLoaded(false);
+    setScale(1);
+    setShowDeleteConfirm(false);
+    setIsDeleting(false);
+    setShowEdit(false);
+  }, [isOpen, doc?.id]);
 
   const handleDelete = async () => {
     if (!doc || !onDelete) return;
