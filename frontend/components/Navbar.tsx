@@ -18,6 +18,26 @@ export default function Navbar() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const lastNameCleanupAttemptedRef = useRef(false);
+
+  useEffect(() => {
+    if (!isLoaded || !user) return;
+    if (lastNameCleanupAttemptedRef.current) return;
+
+    const packLastNameSet = (user.unsafeMetadata as Record<string, unknown> | null | undefined)?.packLastNameSet === true;
+    const lastName = (user.lastName ?? '').trim();
+    if (packLastNameSet || !lastName) return;
+
+    const isGoogle = (user.externalAccounts ?? []).some((acct) => {
+      const anyAcct = acct as unknown as { provider?: string; providerName?: string; provider_name?: string };
+      const provider = (anyAcct.provider || anyAcct.providerName || anyAcct.provider_name || '').toLowerCase();
+      return provider.includes('google');
+    });
+    if (!isGoogle) return;
+
+    lastNameCleanupAttemptedRef.current = true;
+    void user.update({ lastName: null });
+  }, [isLoaded, user]);
 
   // Close on Escape key
   useEffect(() => {

@@ -263,3 +263,44 @@ def get_user_organizations(clerk_user_id: str) -> List[Dict]:
         logger.error(f"Error getting user organizations: {e}")
         return []
 
+
+def update_clerk_user(clerk_user_id: str, payload: Dict) -> Optional[Dict]:
+    """
+    Update a Clerk user via the Clerk Backend API.
+
+    Args:
+        clerk_user_id: Clerk user id (e.g. user_...)
+        payload: JSON payload per Clerk PATCH /users/{user_id}
+
+    Returns:
+        Updated user dict if successful, otherwise None.
+    """
+    if not clerk_user_id:
+        return None
+    try:
+        headers = {
+            "Authorization": f"Bearer {get_clerk_secret_key()}",
+            "Content-Type": "application/json",
+        }
+        response = requests.patch(
+            f"{CLERK_API_URL}/users/{clerk_user_id}",
+            headers=headers,
+            json=payload,
+            timeout=10,
+        )
+        if response.status_code == 200:
+            return response.json()
+        logger.warning(
+            "Failed to update Clerk user %s: %s - %s",
+            clerk_user_id,
+            response.status_code,
+            response.text,
+        )
+        return None
+    except requests.Timeout:
+        logger.warning("Timeout updating Clerk user: %s", clerk_user_id)
+        return None
+    except Exception as e:
+        logger.error("Error updating Clerk user %s: %s", clerk_user_id, e)
+        return None
+

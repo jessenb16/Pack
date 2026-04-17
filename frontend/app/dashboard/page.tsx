@@ -56,9 +56,14 @@ export default function DashboardPage() {
     setNameError(null);
     setNameSaving(true);
     try {
+      const last = nameForm.lastName.trim();
       await user.update({
         firstName: nameForm.firstName.trim(),
-        lastName: nameForm.lastName.trim() || undefined,
+        lastName: last || null,
+        unsafeMetadata: {
+          ...(user.unsafeMetadata ?? {}),
+          packLastNameSet: Boolean(last),
+        },
       });
     } catch (err) {
       setNameError(err instanceof Error ? err.message : 'Failed to save name');

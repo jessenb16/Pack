@@ -34,6 +34,10 @@ export default function FamilySettingsPage() {
   const profileInputRef = useRef<HTMLInputElement | null>(null);
   const [profileUploading, setProfileUploading] = useState(false);
   const [profileError, setProfileError] = useState<string | null>(null);
+  const [nameFirst, setNameFirst] = useState('');
+  const [nameLast, setNameLast] = useState('');
+  const [nameSaving, setNameSaving] = useState(false);
+  const [nameMessage, setNameMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [docUploadEmailEnabled, setDocUploadEmailEnabled] = useState(true);
   const [notifLoading, setNotifLoading] = useState(false);
   const [notifError, setNotifError] = useState<string | null>(null);
@@ -180,6 +184,12 @@ export default function FamilySettingsPage() {
   }, [user, loadFamilyData]);
 
   useEffect(() => {
+    if (!user) return;
+    setNameFirst(user.firstName ?? '');
+    setNameLast(user.lastName ?? '');
+  }, [user?.id, user?.firstName, user?.lastName]);
+
+  useEffect(() => {
     if (!isLoaded || loading) return;
     const shouldScroll =
       typeof window !== 'undefined' &&
@@ -208,6 +218,33 @@ export default function FamilySettingsPage() {
       if (profileInputRef.current) {
         profileInputRef.current.value = '';
       }
+    }
+  }
+
+  async function handleSaveName(e: React.FormEvent) {
+    e.preventDefault();
+    if (!user) return;
+    setNameSaving(true);
+    setNameMessage(null);
+    try {
+      const first = nameFirst.trim();
+      const last = nameLast.trim();
+      await user.update({
+        firstName: first || null,
+        lastName: last || null,
+        unsafeMetadata: {
+          ...(user.unsafeMetadata ?? {}),
+          packLastNameSet: Boolean(last),
+        },
+      });
+      setNameMessage({ type: 'success', text: 'Saved. It may take a few seconds to update everywhere.' });
+    } catch (err) {
+      setNameMessage({
+        type: 'error',
+        text: err instanceof Error ? err.message : 'Failed to update your name. Please try again.',
+      });
+    } finally {
+      setNameSaving(false);
     }
   }
 
@@ -363,6 +400,73 @@ export default function FamilySettingsPage() {
               </p>
             </div>
           </div>
+        </section>
+
+        {/* Name */}
+        <section className="mb-8 rounded-xl bg-white border border-gray-200 p-6 shadow-sm">
+          <h2 className="mb-4 text-xl font-semibold text-gray-800">Your Name</h2>
+          <form onSubmit={handleSaveName} className="space-y-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div>
+                <label htmlFor="first_name" className="mb-2 block text-sm font-medium text-gray-700">
+                  First name
+                </label>
+                <input
+                  id="first_name"
+                  value={nameFirst}
+                  onChange={(e) => setNameFirst(e.target.value)}
+                  className="w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-red-900 focus:outline-none focus:ring-2 focus:ring-red-900"
+                  placeholder="First name"
+                  disabled={nameSaving}
+                  autoComplete="given-name"
+                />
+              </div>
+              <div>
+                <label htmlFor="last_name" className="mb-2 block text-sm font-medium text-gray-700">
+                  Last name
+                </label>
+                <input
+                  id="last_name"
+                  value={nameLast}
+                  onChange={(e) => setNameLast(e.target.value)}
+                  className="w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-red-900 focus:outline-none focus:ring-2 focus:ring-red-900"
+                  placeholder="Last name"
+                  disabled={nameSaving}
+                  autoComplete="family-name"
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <button
+                type="submit"
+                disabled={nameSaving}
+                className="inline-flex items-center justify-center rounded-lg bg-gray-900 px-4 py-2 text-sm text-white transition-colors hover:bg-gray-800 disabled:bg-gray-400"
+              >
+                {nameSaving ? (
+                  <span className="flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Saving...
+                  </span>
+                ) : (
+                  'Save name'
+                )}
+              </button>
+              <p className="text-xs text-gray-500">
+                Changes can take a few seconds to appear after saving.
+              </p>
+            </div>
+
+            {nameMessage && (
+              <div
+                className={`rounded-lg p-3 ${
+                  nameMessage.type === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                }`}
+              >
+                {nameMessage.text}
+              </div>
+            )}
+          </form>
         </section>
 
         {/* Notifications */}
