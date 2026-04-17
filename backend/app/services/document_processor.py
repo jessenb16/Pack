@@ -4,7 +4,7 @@ import re
 import unicodedata
 
 from fpdf import FPDF
-from PIL import Image
+from PIL import Image, ImageOps
 from pypdf import PdfReader
 from pdf2image import convert_from_bytes
 from openai import OpenAI
@@ -89,6 +89,9 @@ def generate_thumbnail(file_data: bytes, filename: str) -> Tuple[bytes, str]:
             img = images[0]
         else:
             img = Image.open(io.BytesIO(file_data))
+            # Many phone photos rely on EXIF Orientation for correct display.
+            # Transpose here so the generated thumbnail pixels are upright.
+            img = ImageOps.exif_transpose(img)
         
         # Resize to 300px width
         if img.width > 300:
