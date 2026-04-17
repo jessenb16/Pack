@@ -132,6 +132,10 @@ class ApiClient {
     return this.request<DocumentApiRecord[]>(`/api/documents${query ? `?${query}` : ''}`, {}, token);
   }
 
+  async getDocument(documentId: string, token?: string | null) {
+    return this.request<DocumentApiRecord>(`/api/documents/${encodeURIComponent(documentId)}`, {}, token);
+  }
+
   async uploadDocument(
     payload: {
       file?: File;
