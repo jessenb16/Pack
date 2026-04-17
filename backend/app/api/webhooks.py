@@ -3,6 +3,7 @@ import json
 import logging
 
 from fastapi import APIRouter, Request, HTTPException, status
+from fastapi.concurrency import run_in_threadpool
 from svix.webhooks import Webhook as SvixWebhook
 from svix.exceptions import WebhookVerificationError
 
@@ -80,7 +81,9 @@ async def clerk_webhook(request: Request):
                 pack_last_name_set = isinstance(unsafe_meta, dict) and unsafe_meta.get("packLastNameSet") is True
 
                 if is_google and not pack_last_name_set:
-                    updated = update_clerk_user(clerk_user_id, {"last_name": ""})
+                    updated = await run_in_threadpool(
+                        update_clerk_user, clerk_user_id, {"last_name": ""}
+                    )
                     if updated is not None:
                         logger.info(
                             "Cleared Google-provided last_name for Clerk user %s (webhook: %s)",

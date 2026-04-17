@@ -33,7 +33,7 @@ from bson import ObjectId  # noqa: E402
 from pymongo import MongoClient  # noqa: E402
 
 from app.core.config import settings  # noqa: E402
-from app.services.document_processor import process_document  # noqa: E402
+from app.services.document_processor import generate_thumbnail  # noqa: E402
 from app.services.storage import (  # noqa: E402
     extract_s3_key_from_url,
     get_s3_client,
@@ -111,27 +111,38 @@ def main() -> int:
         print(f"       thumbnail={thumbnail_key or '(missing)'}")
 
         file_data = _download_s3_bytes(original_key)
-        processed = process_document(file_data, filename, caption="")
-
-        thumb_bytes = processed["thumbnail_data"]
-        thumb_filename = _basename(thumbnail_key) if thumbnail_key else processed["thumbnail_filename"]
-        new_thumb_key = upload_to_s3(thumb_bytes, org_id, thumb_filename, is_thumbnail=True)
+        thumb_bytes, generated_thumb_filename = generate_thumbnail(file_data, filename)
 
         if not args.apply:
-            print(f"[dry-run] would upload thumbnail to: {new_thumb_key}")
-            if not thumbnail_key:
+            if thumbnail_key:
+                print(f"[dry-run] would overwrite thumbnail object at existing key: {thumbnail_key}")
+            else:
+                print(
+                    "[dry-run] would upload thumbnail for "
+                    f"org={org_id} using filename={generated_thumb_filename}"
+                )
                 print("[dry-run] would update DB assets.s3_thumbnail_url to new key")
             continue
 
-        # If the doc previously had no thumbnail key, persist it so the app can find it.
-        if not thumbnail_key:
+        # If the doc already has a thumbnail key, overwrite that exact S3 object so
+        # legacy/custom keys remain valid without requiring a DB update.
+        if thumbnail_key:
+            s3 = get_s3_client()
+            s3.put_object(
+                Bucket=settings.AWS_S3_BUCKET_NAME,
+                Key=thumbnail_key,
+                Body=thumb_bytes,
+            )
+            print(f"[apply] overwrote thumbnail object at existing key: {thumbnail_key}")
+        else:
+            new_thumb_key = upload_to_s3(
+                thumb_bytes, org_id, generated_thumb_filename, is_thumbnail=True
+            )
             db.documents.update_one(
                 {"_id": oid},
                 {"$set": {"assets.s3_thumbnail_url": new_thumb_key}},
             )
             print(f"[apply] updated DB assets.s3_thumbnail_url -> {new_thumb_key}")
-        else:
-            print(f"[apply] overwrote thumbnail object at: {new_thumb_key}")
 
         changed += 1
 

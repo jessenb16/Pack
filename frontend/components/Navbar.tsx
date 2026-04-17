@@ -18,11 +18,11 @@ export default function Navbar() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
-  const lastNameCleanupAttemptedRef = useRef(false);
+  const lastNameCleanupStateRef = useRef<'idle' | 'inFlight' | 'done'>('idle');
 
   useEffect(() => {
     if (!isLoaded || !user) return;
-    if (lastNameCleanupAttemptedRef.current) return;
+    if (lastNameCleanupStateRef.current !== 'idle') return;
 
     const packLastNameSet = (user.unsafeMetadata as Record<string, unknown> | null | undefined)?.packLastNameSet === true;
     const lastName = (user.lastName ?? '').trim();
@@ -35,8 +35,17 @@ export default function Navbar() {
     });
     if (!isGoogle) return;
 
-    lastNameCleanupAttemptedRef.current = true;
-    void user.update({ lastName: null });
+    lastNameCleanupStateRef.current = 'inFlight';
+    void (async () => {
+      try {
+        await user.update({ lastName: null });
+        lastNameCleanupStateRef.current = 'done';
+      } catch (err) {
+        lastNameCleanupStateRef.current = 'idle';
+        // eslint-disable-next-line no-console
+        console.warn('Failed clearing google-provided lastName:', err);
+      }
+    })();
   }, [isLoaded, user]);
 
   // Close on Escape key
