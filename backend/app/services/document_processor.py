@@ -2,6 +2,7 @@
 import io
 import re
 import unicodedata
+from pathlib import Path
 
 from fpdf import FPDF
 from PIL import Image, ImageOps
@@ -48,6 +49,87 @@ _UNICODE_TO_ASCII = str.maketrans({
     "\u2026": "...", # ellipsis
 })
 
+_UNICODE_FONT_FAMILY = "DejaVuSans"
+_UNICODE_FONT_PATH = (
+    Path(__file__).resolve().parents[1] / "assets" / "fonts" / "DejaVuSans.ttf"
+)
+_EMOJI_FONT_FAMILY = "NotoColorEmoji"
+_EMOJI_FONT_PATH = (
+    Path(__file__).resolve().parents[1] / "assets" / "fonts" / "NotoColorEmoji.ttf"
+)
+
+
+def _is_emoji_base_char(ch: str) -> bool:
+    """Heuristic: True for most emoji codepoints."""
+    o = ord(ch)
+    return (
+        0x1F000 <= o <= 0x1FAFF  # Misc symbols & pictographs, emoticons, transport, supplemental, etc.
+        or 0x2600 <= o <= 0x27BF  # Misc symbols, dingbats (includes ✨)
+    )
+
+
+def _is_emoji_joiner_or_modifier(ch: str) -> bool:
+    o = ord(ch)
+    return (
+        o == 0x200D  # ZWJ
+        or 0xFE00 <= o <= 0xFE0F  # variation selectors
+        or 0x1F3FB <= o <= 0x1F3FF  # skin tone modifiers
+    )
+
+
+def _split_text_runs_for_fonts(text: str) -> list[tuple[str, str]]:
+    """Split text into (family, run) where family is unicode or emoji font.
+
+    This groups emoji sequences (incl. ZWJ/VS/modifiers) to improve rendering.
+    """
+    runs: list[tuple[str, str]] = []
+    buf: list[str] = []
+    current_family: str | None = None
+
+    def flush():
+        nonlocal buf, current_family
+        if buf:
+            runs.append((current_family or _UNICODE_FONT_FAMILY, "".join(buf)))
+            buf = []
+
+    i = 0
+    n = len(text)
+    while i < n:
+        ch = text[i]
+        if _is_emoji_base_char(ch):
+            # Start an emoji sequence cluster: base + (joiners/modifiers + base)*
+            cluster = [ch]
+            i += 1
+            while i < n:
+                nxt = text[i]
+                if _is_emoji_joiner_or_modifier(nxt):
+                    cluster.append(nxt)
+                    i += 1
+                    continue
+                # Some emoji sequences have another emoji base after a joiner
+                if _is_emoji_base_char(nxt):
+                    cluster.append(nxt)
+                    i += 1
+                    continue
+                break
+
+            flush()
+            current_family = _EMOJI_FONT_FAMILY
+            buf.append("".join(cluster))
+            flush()
+            current_family = None
+            continue
+
+        # Non-emoji char
+        if current_family != _UNICODE_FONT_FAMILY:
+            flush()
+            current_family = _UNICODE_FONT_FAMILY
+        buf.append(ch)
+        i += 1
+
+    flush()
+    return runs
+
 
 def _normalize_text_for_pdf(text: str) -> str:
     """Replace Unicode punctuation with ASCII so Helvetica can render it."""
@@ -65,14 +147,92 @@ def text_to_pdf(text: str, filename_base: str = "text_upload") -> Tuple[bytes, s
         raise ValueError("Text cannot be empty")
     pdf = FPDF()
     pdf.add_page()
-    pdf.set_font("Helvetica", size=12)
     pdf.set_auto_page_break(auto=True, margin=15)
-    normalized = _normalize_text_for_pdf(text.strip())
-    # multi_cell auto-wraps and handles pagination
-    pdf.multi_cell(w=0, h=6, txt=normalized)
-    buffer = io.BytesIO()
-    pdf.output(buffer)
-    pdf_bytes = buffer.getvalue()
+    # Preserve newlines from pasted input; only trim outer whitespace.
+    text_value = text.strip("\n").strip()
+
+    # Prefer bundled Unicode/emoji fonts so we preserve characters (instead of replacing with '?').
+    # If fonts can't be loaded for any reason, fall back to core fonts + normalization.
+    using_fallback = False
+    try:
+        if not _UNICODE_FONT_PATH.exists():
+            raise FileNotFoundError(str(_UNICODE_FONT_PATH))
+        if not _EMOJI_FONT_PATH.exists():
+            raise FileNotFoundError(str(_EMOJI_FONT_PATH))
+        pdf.add_font(
+            family=_UNICODE_FONT_FAMILY,
+            style="",
+            fname=str(_UNICODE_FONT_PATH),
+            uni=True,
+        )
+        pdf.add_font(
+            family=_EMOJI_FONT_FAMILY,
+            style="",
+            fname=str(_EMOJI_FONT_PATH),
+            uni=True,
+        )
+        # We'll switch fonts dynamically per run below.
+        rendered_text = text_value
+    except Exception as e:
+        logger.warning(
+            "Unicode/emoji font unavailable (%s, %s). Falling back to Helvetica with lossy normalization: %s",
+            _UNICODE_FONT_PATH,
+            _EMOJI_FONT_PATH,
+            e,
+            exc_info=True,
+        )
+        pdf.set_font("Helvetica", size=12)
+        rendered_text = _normalize_text_for_pdf(text_value)
+        using_fallback = True
+
+    # If we're using Helvetica fallback, multi_cell is fine (single font).
+    # If we're using Unicode+Emoji fonts, we do simple wrapping while switching fonts mid-line.
+    if using_fallback:
+        pdf.multi_cell(w=0, h=6, txt=rendered_text)
+    else:
+        font_size = 12
+        line_h = 6
+        # Write with basic word-wrapping, preserving explicit newlines.
+        for para_idx, paragraph in enumerate(rendered_text.split("\n")):
+            if para_idx > 0:
+                pdf.ln(line_h)
+            if not paragraph:
+                continue
+
+            # Split into whitespace / non-whitespace tokens to preserve spacing.
+            parts = re.split(r"(\s+)", paragraph)
+            for part in parts:
+                if part == "":
+                    continue
+                if part.isspace():
+                    # Collapse consecutive whitespace to a single space for layout stability.
+                    token = " "
+                    family_runs = [(_UNICODE_FONT_FAMILY, token)]
+                else:
+                    family_runs = _split_text_runs_for_fonts(part)
+
+                # Measure token width (sum of runs with their respective fonts).
+                token_w = 0.0
+                for fam, run in family_runs:
+                    pdf.set_font(fam, size=font_size)
+                    token_w += pdf.get_string_width(run)
+
+                max_x = pdf.w - pdf.r_margin
+                # If token doesn't fit on this line (and it's not just a leading space), wrap.
+                if pdf.get_x() + token_w > max_x and not (len(family_runs) == 1 and family_runs[0][1] == " "):
+                    pdf.ln(line_h)
+
+                # Avoid leading spaces after wrap.
+                if (pdf.get_x() <= pdf.l_margin + 0.01) and (len(family_runs) == 1 and family_runs[0][1] == " "):
+                    continue
+
+                for fam, run in family_runs:
+                    pdf.set_font(fam, size=font_size)
+                    pdf.write(line_h, run)
+
+    # fpdf2 returns a latin-1 string when dest="S"; convert to bytes explicitly.
+    out = pdf.output(dest="S")
+    pdf_bytes = out.encode("latin-1") if isinstance(out, str) else bytes(out)
     filename = f"{filename_base}.pdf" if not filename_base.lower().endswith(".pdf") else filename_base
     return pdf_bytes, filename
 
