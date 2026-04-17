@@ -27,6 +27,10 @@ export default function FamilySettingsPage() {
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [bypassMembersCacheUntil, setBypassMembersCacheUntil] = useState(0);
   const lastImageUrlRef = useRef<string | null>(null);
+  const getTokenRef = useRef(getToken);
+  const orgIdRef = useRef(orgId);
+  getTokenRef.current = getToken;
+  orgIdRef.current = orgId;
   const profileInputRef = useRef<HTMLInputElement | null>(null);
   const [profileUploading, setProfileUploading] = useState(false);
   const [profileError, setProfileError] = useState<string | null>(null);
@@ -42,7 +46,9 @@ export default function FamilySettingsPage() {
         setLoading(true);
       }
       // Get token - backend will fetch org from Clerk API if not in token
-      const token = await getToken({ organizationId: orgId || undefined });
+      const token = await getTokenRef.current({
+        organizationId: orgIdRef.current || undefined,
+      });
       
       if (!token) {
         setMessage({ type: 'error', text: 'Failed to get authentication token' });
@@ -90,14 +96,17 @@ export default function FamilySettingsPage() {
         setLoading(false);
       }
     }
-  }, [getToken, orgId, bypassMembersCacheUntil, router]);
+  }, [bypassMembersCacheUntil, router]);
 
   const loadNotificationSettings = useCallback(async () => {
-    if (!orgId) return;
+    const oid = orgIdRef.current;
+    if (!oid) return;
     setNotifError(null);
     setNotifLoading(true);
     try {
-      const token = await getToken({ organizationId: orgId || undefined });
+      const token = await getTokenRef.current({
+        organizationId: oid || undefined,
+      });
       if (!token) throw new Error('Failed to get authentication token');
       const resp = await apiClient.getNotificationSettings(token);
       if (resp.data) {
@@ -110,14 +119,17 @@ export default function FamilySettingsPage() {
     } finally {
       setNotifLoading(false);
     }
-  }, [getToken, orgId]);
+  }, []);
 
   const saveNotificationSettings = useCallback(async (enabled: boolean) => {
-    if (!orgId) return;
+    const oid = orgIdRef.current;
+    if (!oid) return;
     setNotifError(null);
     setNotifLoading(true);
     try {
-      const token = await getToken({ organizationId: orgId || undefined });
+      const token = await getTokenRef.current({
+        organizationId: oid || undefined,
+      });
       if (!token) throw new Error('Failed to get authentication token');
       const resp = await apiClient.patchNotificationSettings(
         { document_uploaded_email_enabled: enabled },
@@ -133,7 +145,7 @@ export default function FamilySettingsPage() {
     } finally {
       setNotifLoading(false);
     }
-  }, [getToken, orgId]);
+  }, []);
 
   useEffect(() => {
     if (!isLoaded) return;
@@ -149,7 +161,11 @@ export default function FamilySettingsPage() {
     }
     loadFamilyData();
     loadNotificationSettings();
-  }, [user, isLoaded, orgId, router, loadFamilyData, loadNotificationSettings]);
+    // Intentionally depend on stable identity: getToken from Clerk changes on session refresh.
+    // Refs above keep loadFamilyData / loadNotificationSettings stable so we don't
+    // re-fetch and toggle full-page loading (which resets scroll position).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, isLoaded, orgId, router]);
 
   useEffect(() => {
     if (!user) return;
