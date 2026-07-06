@@ -43,3 +43,5 @@ Thumbs.db
 build/
 dist/
 
+# Notes from AI conversations for future improvements
+security_improvements.md

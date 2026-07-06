@@ -7,7 +7,7 @@
 **Core Requirement:**
 * **Privacy:** Data is strictly isolated by Family (Organization).
 * **Hybrid Search:** Supports both rigid filtering (Tags) and semantic search (Vector/RAG).
-* **Media Types:** Handles Images (Vision AI) and PDFs (Text Extraction) in a unified pipeline.
+* **Media Types:** Handles Images (Vision AI), **multi-image documents** (ordered pages, e.g. card front/back), and PDFs (Text Extraction) in a unified pipeline.
 
 ---
 
@@ -32,12 +32,14 @@
 
 ### B. Ingestion Pipeline (The "Upload Wizard")
 We use a **Hybrid Ingestion Strategy** to balance cost and accuracy.
-1.  **User Action:** User drags file -> Manually selects Metadata (Sender, Recipient, Event, Date).
+1.  **User Action:** User uploads file(s) -> Manually selects Metadata (Sender, Recipient, Event, Date).
+    * Single image, PDF, or pasted text (saved as PDF).
+    * **Multi-image:** 2–5 images in one batch, drag-to-reorder; images only (no PDF mix).
 2.  **Processing (Backend):**
-    * **Thumbnail:** Generate a 300px JPG (using `pdf2image` for PDFs or `Pillow` for Images).
+    * **Thumbnail:** Generate a 300px JPG (using `pdf2image` for PDFs or `Pillow` for Images). Multi-image: one per page; page 1 is the grid thumbnail.
     * **Text Extraction:**
         * *If PDF:* Use `pypdf` to extract text (Free).
-        * *If Image:* Use **GPT-4o Vision** to transcribe handwriting and generate a visual description (Paid).
+        * *If Image:* Use **GPT-4o Vision** to transcribe handwriting and generate a visual description (Paid). If multi-image, then once batch call across all images.
 3.  **Storage:** Save File to S3 $\rightarrow$ Save Metadata + Text to MongoDB $\rightarrow$ Generate Embedding $\rightarrow$ Save Vector to MongoDB.
 
 ### C. The AI Agent (LangGraph)
@@ -82,9 +84,18 @@ We use **LangGraph** to build a reactive agent that routes user queries to the c
 
   // 2. File Assets (For Grid Display)
   "assets": {
-    "file_type": "image/jpeg",   // or "application/pdf"
-    "s3_original_url": "https://s3...",
-    "s3_thumbnail_url": "https://s3..."
+    "file_type": "image/jpeg",   // or "application/pdf", or "image/multi"
+    "s3_original_url": "https://s3...",   // page 1 for multi-image (backwards compat)
+    "s3_thumbnail_url": "https://s3...",
+    // Multi-image only: ordered pages (extracted_text per page is Mongo-only, not in API)
+    "pages": [
+      {
+        "page_number": 1,
+        "s3_original_url": "families/{org_id}/documents/{doc_id}/page_01.jpg",
+        "s3_thumbnail_url": "families/{org_id}/documents/{doc_id}/thumbnails/page_01.jpg",
+        "extracted_text": "..."
+      }
+    ]
   },
 
   // 3. AI Context (For "Reader" Tool / RAG)

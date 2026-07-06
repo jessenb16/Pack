@@ -226,6 +226,16 @@ export default function DocumentViewer({
     doc.file_type === 'application/pdf' ||
     doc.s3_original_url.toLowerCase().includes('.pdf');
 
+  const sortedPages = doc.pages?.length
+    ? [...doc.pages].sort((a, b) => a.page_number - b.page_number)
+    : [];
+  const isMultiImage =
+    doc.file_type === 'image/multi' && sortedPages.length > 1;
+
+  const handleMultiPageImageLoad = () => {
+    setContentLoaded(true);
+  };
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/80 p-2 backdrop-blur-sm md:items-center md:p-8"
@@ -503,6 +513,53 @@ export default function DocumentViewer({
                 <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-white/70">
                   <Loader2 className="h-10 w-10 animate-spin text-gray-600" aria-hidden />
                   <p className="text-sm font-medium text-gray-600">Loading document…</p>
+                </div>
+              )}
+            </>
+          ) : isMultiImage ? (
+            <>
+              {!contentLoaded && doc.s3_thumbnail_url && (
+                <div className="flex min-h-[40vh] items-center justify-center">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={doc.s3_thumbnail_url}
+                    alt="Loading preview"
+                    className="max-h-[50vh] max-w-full object-contain rounded shadow-md opacity-80"
+                  />
+                </div>
+              )}
+              <div
+                className={`flex flex-col items-center gap-10 py-2 ${
+                  contentLoaded ? '' : 'absolute inset-0 opacity-0'
+                }`}
+              >
+                {sortedPages.map((page) => (
+                  <div key={page.page_number} className="w-full max-w-4xl">
+                    <p className="mb-2 text-center text-sm font-medium text-gray-600">
+                      Page {page.page_number} of {sortedPages.length}
+                    </p>
+                    <div
+                      className={`flex justify-center ${
+                        scale > 1 ? 'cursor-zoom-out' : 'cursor-zoom-in'
+                      }`}
+                      onClick={() => setScale(scale > 1 ? 1 : 1.5)}
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={page.s3_original_url}
+                        alt={`Document page ${page.page_number}`}
+                        className="max-h-[70vh] w-auto max-w-full rounded shadow-md object-contain"
+                        style={{ transform: `scale(${scale})` }}
+                        onLoad={handleMultiPageImageLoad}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {!contentLoaded && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-white/70">
+                  <Loader2 className="h-10 w-10 animate-spin text-gray-600" aria-hidden />
+                  <p className="text-sm font-medium text-gray-600">Loading pages…</p>
                 </div>
               )}
             </>

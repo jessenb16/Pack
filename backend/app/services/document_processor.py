@@ -1,5 +1,7 @@
 """Document processing pipeline for FastAPI."""
+import base64
 import io
+import json
 import re
 import unicodedata
 from pathlib import Path
@@ -11,7 +13,7 @@ from pdf2image import convert_from_bytes
 from openai import OpenAI
 from app.core.config import settings
 import logging
-from typing import Tuple, Optional
+from typing import Tuple, Optional, List, Dict
 
 # SYSTEM REQUIREMENT: This module requires 'poppler-utils' to be installed.
 # On Mac: brew install poppler
@@ -20,6 +22,8 @@ from typing import Tuple, Optional
 logger = logging.getLogger(__name__)
 
 client = OpenAI(api_key=settings.OPENAI_API_KEY)
+
+IMAGE_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "jfif", "webp"}
 
 
 def _sanitize_filename(name: str, max_length: int = 80) -> str:
@@ -325,6 +329,197 @@ def extract_text_from_image(file_data_base64: str, filename: str) -> str:
     except Exception as e:
         logger.error(f"Error extracting text from image: {e}")
         return ""
+
+
+def page_storage_filename(page_number: int, original_filename: str) -> str:
+    """Normalized S3 page key filename (page_01.jpg, page_02.png, ...)."""
+    ext = original_filename.lower().rsplit(".", 1)[-1] if "." in original_filename else "jpg"
+    if ext not in IMAGE_EXTENSIONS:
+        ext = "jpg"
+    if ext == "jpeg":
+        ext = "jpg"
+    return f"page_{page_number:02d}.{ext}"
+
+
+def prepare_image_for_vision(file_data: bytes, filename: str) -> Tuple[str, str]:
+    """
+    EXIF-correct and downscale for vision API input. Full-res bytes stay in S3 separately.
+    Returns (base64_string, image_extension_for_data_url).
+    """
+    img = Image.open(io.BytesIO(file_data))
+    img = ImageOps.exif_transpose(img)
+    max_edge = settings.VISION_IMAGE_MAX_EDGE
+    w, h = img.size
+    long_edge = max(w, h)
+    if long_edge > max_edge:
+        scale = max_edge / long_edge
+        img = img.resize((int(w * scale), int(h * scale)), Image.Resampling.LANCZOS)
+
+    if img.mode in ("RGBA", "LA", "P"):
+        rgb_img = Image.new("RGB", img.size, (255, 255, 255))
+        if img.mode == "P":
+            img = img.convert("RGBA")
+        rgb_img.paste(img, mask=img.split()[-1] if img.mode in ("RGBA", "LA") else None)
+        img = rgb_img
+    elif img.mode != "RGB":
+        img = img.convert("RGB")
+
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", quality=90)
+    b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
+    return b64, "jpeg"
+
+
+def extract_text_from_images_batch(
+    images: List[Tuple[str, str, int]],
+    page_count: int,
+) -> Dict[int, str]:
+    """
+    Extract per-page text from an ordered image batch via one GPT-4o call.
+    images: list of (base64, ext, page_number)
+    Returns mapping page_number -> text.
+    """
+    if not images:
+        return {}
+
+    prompt = (
+        f"You are analyzing {page_count} images that together form a single family memory, "
+        f"shown in order (page 1 through page {page_count}).\n\n"
+        "For EACH image:\n"
+        "- If it contains handwritten or typed text, transcribe it accurately.\n"
+        "- If it is a photo with little or no text, describe what you see in detail.\n"
+        "- Use context from other pages when helpful (e.g. front and back of the same card, "
+        "or continued text across pages).\n"
+        "- Do not repeat the same description on every page unless each page actually shows "
+        "the same content.\n\n"
+        "Return JSON only, in this shape:\n"
+        '{"pages": [{"page_number": 1, "text": "..."}, {"page_number": 2, "text": "..."}]}'
+    )
+
+    content: List[dict] = [{"type": "text", "text": prompt}]
+    for b64, ext, page_num in images:
+        content.append({"type": "text", "text": f"Page {page_num}:"})
+        content.append(
+            {
+                "type": "image_url",
+                "image_url": {"url": f"data:image/{ext};base64,{b64}"},
+            }
+        )
+
+    max_tokens = min(4000, 800 * page_count)
+
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[{"role": "user", "content": content}],
+            max_tokens=max_tokens,
+            response_format={"type": "json_object"},
+        )
+        raw = response.choices[0].message.content or ""
+        parsed = _parse_batch_vision_response(raw, page_count)
+        if parsed:
+            return parsed
+        logger.warning("Batch vision JSON parse failed; falling back to per-page extraction")
+    except Exception as e:
+        logger.error(f"Batch vision extraction failed: {e}")
+
+    return _fallback_per_page_extraction(images)
+
+
+def _parse_batch_vision_response(raw: str, page_count: int) -> Optional[Dict[int, str]]:
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+
+    pages_raw = data.get("pages")
+    if not isinstance(pages_raw, list):
+        return None
+
+    result: Dict[int, str] = {}
+    for item in pages_raw:
+        if not isinstance(item, dict):
+            continue
+        try:
+            page_num = int(item.get("page_number", 0))
+        except (TypeError, ValueError):
+            continue
+        if page_num < 1 or page_num > page_count:
+            continue
+        text = item.get("text", "")
+        result[page_num] = str(text).strip() if text is not None else ""
+
+    if not result:
+        return None
+    return result
+
+
+def _fallback_per_page_extraction(
+    images: List[Tuple[str, str, int]],
+) -> Dict[int, str]:
+    result: Dict[int, str] = {}
+    for b64, ext, page_num in images:
+        # extract_text_from_image expects filename for ext hint; ext is already in data URL
+        text = extract_text_from_image(b64, f"page_{page_num:02d}.{ext}")
+        result[page_num] = (text or "").strip()
+    return result
+
+
+def process_multi_image_document(files: List[Tuple[bytes, str]]) -> dict:
+    """
+    Process an ordered batch of images for a multi-page document.
+
+    files: list of (file_bytes, original_filename) in page order.
+    Returns per-page thumbnails/text plus combined extracted text for embedding.
+    """
+    if len(files) < 2:
+        raise ValueError("Multi-image processing requires at least 2 files")
+
+    vision_inputs: List[Tuple[str, str, int]] = []
+    page_staging: List[dict] = []
+
+    for page_number, (file_data, filename) in enumerate(files, start=1):
+        page_filename = page_storage_filename(page_number, filename)
+        thumbnail_data, _ = generate_thumbnail(file_data, page_filename)
+        b64, ext = prepare_image_for_vision(file_data, filename)
+        vision_inputs.append((b64, ext, page_number))
+        page_staging.append(
+            {
+                "page_number": page_number,
+                "page_filename": page_filename,
+                "thumbnail_data": thumbnail_data,
+            }
+        )
+
+    texts_by_page = extract_text_from_images_batch(vision_inputs, len(files))
+
+    pages: List[dict] = []
+    for staged in page_staging:
+        page_num = staged["page_number"]
+        extracted = texts_by_page.get(page_num, "")
+        pages.append(
+            {
+                "page_number": page_num,
+                "page_filename": staged["page_filename"],
+                "thumbnail_data": staged["thumbnail_data"],
+                "extracted_text": extracted.strip(),
+            }
+        )
+
+    combined_parts = [
+        f"Page {p['page_number']}: {p['extracted_text']}"
+        for p in pages
+        if p.get("extracted_text")
+    ]
+    combined_extracted_text = "\n\n".join(combined_parts)
+
+    first = pages[0]
+    return {
+        "pages": pages,
+        "combined_extracted_text": combined_extracted_text,
+        "thumbnail_data": first["thumbnail_data"],
+        "thumbnail_filename": f"page_{first['page_number']:02d}.jpg",
+    }
 
 
 def create_embedding(text: str) -> list:
