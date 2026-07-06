@@ -21,9 +21,17 @@ from typing import Tuple, Optional, List, Dict
 
 logger = logging.getLogger(__name__)
 
-client = OpenAI(api_key=settings.OPENAI_API_KEY)
+_client: OpenAI | None = None
 
 IMAGE_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "jfif", "webp"}
+
+
+def get_openai_client() -> OpenAI:
+    """Lazy OpenAI client so app import works without OPENAI_API_KEY (e.g. CI)."""
+    global _client
+    if _client is None:
+        _client = OpenAI(api_key=settings.OPENAI_API_KEY)
+    return _client
 
 
 def _sanitize_filename(name: str, max_length: int = 80) -> str:
@@ -304,7 +312,7 @@ def extract_text_from_image(file_data_base64: str, filename: str) -> str:
     try:
         image_ext = filename.split('.')[-1].lower() if '.' in filename else 'jpeg'
         
-        response = client.chat.completions.create(
+        response = get_openai_client().chat.completions.create(
             model="gpt-4o",
             messages=[
                 {
@@ -409,7 +417,7 @@ def extract_text_from_images_batch(
     max_tokens = min(4000, 800 * page_count)
 
     try:
-        response = client.chat.completions.create(
+        response = get_openai_client().chat.completions.create(
             model="gpt-4o",
             messages=[{"role": "user", "content": content}],
             max_tokens=max_tokens,
@@ -535,7 +543,7 @@ def create_embedding(text: str) -> list:
             logger.debug("Skipping embedding creation for empty text")
             return []
         
-        response = client.embeddings.create(
+        response = get_openai_client().embeddings.create(
             model="text-embedding-3-small",
             input=text
         )

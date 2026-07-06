@@ -118,9 +118,10 @@ def _doc_to_response(
     raw_pages = assets.get("pages")
     if raw_pages and isinstance(raw_pages, list):
         pages_response = []
-        for page in sorted(raw_pages, key=lambda p: p.get("page_number", 0)):
-            if not isinstance(page, dict):
-                continue
+        for page in sorted(
+            (p for p in raw_pages if isinstance(p, dict)),
+            key=lambda p: p.get("page_number", 0),
+        ):
             page_orig_key = extract_s3_key_from_url(page.get("s3_original_url", ""))
             page_thumb_key = extract_s3_key_from_url(page.get("s3_thumbnail_url", ""))
             pages_response.append(
@@ -600,9 +601,13 @@ async def upload_document(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"File type not allowed. Allowed types: {', '.join(settings.ALLOWED_EXTENSIONS)}",
             )
-        content_type = f"image/{filename.rsplit('.', 1)[-1].lower()}"
-        if filename.lower().endswith(".pdf"):
+        ext = filename.rsplit(".", 1)[-1].lower()
+        if ext == "pdf":
             content_type = "application/pdf"
+        elif ext in ("jpg", "jpeg", "jfif"):
+            content_type = "image/jpeg"
+        else:
+            content_type = f"image/{ext}"
     elif has_legacy_file:
         if not allowed_file(file.filename):
             raise HTTPException(

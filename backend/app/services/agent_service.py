@@ -50,14 +50,9 @@ METADATA HANDLING:
 - Use the exact sender/event names provided in context when possible.
 """
 
-# 1. Initialize the Model
-# We use streaming=True so the frontend can see the text appear in real-time
-model = ChatOpenAI(
-    model="gpt-4o-mini", 
-    api_key=settings.OPENAI_API_KEY,
-    temperature=0,
-    streaming=True
-)
+# 1. Initialize the Model (lazy — see get_chat_model / get_agent_executor)
+_chat_model: ChatOpenAI | None = None
+_agent_executor = None
 
 # --- TOOL 1: THE FETCHER (Async) ---
 # content_and_artifact: LLM sees text only; frontend gets artifact list (URLs, ids)
@@ -310,11 +305,31 @@ checkpointer = _checkpointer_cm.__enter__()
 # This handles the loop: LLM -> Tool -> LLM automatically
 # Note: state_modifier not supported in this LangGraph version
 # We'll handle system message in execute_agent_query to prevent duplication
-agent_executor = create_react_agent(
-    model, 
-    tools, 
-    checkpointer=checkpointer
-)
+
+
+def get_chat_model() -> ChatOpenAI:
+    """Lazy ChatOpenAI client so app import works without OPENAI_API_KEY (e.g. CI)."""
+    global _chat_model
+    if _chat_model is None:
+        _chat_model = ChatOpenAI(
+            model="gpt-4o-mini",
+            api_key=settings.OPENAI_API_KEY,
+            temperature=0,
+            streaming=True,
+        )
+    return _chat_model
+
+
+def get_agent_executor():
+    """Lazy ReAct agent graph (created on first chat request)."""
+    global _agent_executor
+    if _agent_executor is None:
+        _agent_executor = create_react_agent(
+            get_chat_model(),
+            tools,
+            checkpointer=checkpointer,
+        )
+    return _agent_executor
 
 # --- EXECUTION FUNCTIONS ---
 
@@ -347,7 +362,7 @@ async def execute_agent_query(
     # Check existing state to see if system message already exists
     # This prevents system message duplication across conversation turns
     try:
-        existing_state = await agent_executor.aget_state(config)
+        existing_state = await get_agent_executor().aget_state(config)
         existing_messages = existing_state.values.get("messages", [])
         
         # Check if any system message exists (content may include dynamic org context)
@@ -404,7 +419,7 @@ async def execute_agent_query(
     
     # Execute agent (non-streaming)
     try:
-        final_state = await agent_executor.ainvoke(inputs, config=config)
+        final_state = await get_agent_executor().ainvoke(inputs, config=config)
     except Exception as e:
         logger.error(f"Error executing agent: {e}", exc_info=True)
         
@@ -416,7 +431,7 @@ async def execute_agent_query(
             import time
             config["configurable"]["thread_id"] = f"{config['configurable']['thread_id']}_{int(time.time())}"
             try:
-                final_state = await agent_executor.ainvoke(inputs, config=config)
+                final_state = await get_agent_executor().ainvoke(inputs, config=config)
             except Exception as retry_error:
                 logger.error(f"Error on retry: {retry_error}")
                 return {
@@ -550,5 +565,5 @@ async def run_agent_chat(user_message: str, org_id: str, thread_id: str):
 
     # Stream the output back to the API
     # The frontend will receive "on_chat_model_stream" (text) and "on_tool_end" (JSON citations)
-    async for event in agent_executor.astream_events(inputs, config=config, version="v1"):
+    async for event in get_agent_executor().astream_events(inputs, config=config, version="v1"):
         yield event
