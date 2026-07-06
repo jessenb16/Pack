@@ -1,6 +1,6 @@
 """Pydantic models for Document."""
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
 from datetime import datetime
 
 
@@ -19,6 +19,13 @@ class DocumentMetadata(BaseModel):
     caption: Optional[str] = None
 
 
+class DocumentPageResponse(BaseModel):
+    """Single page of a multi-image document (API response)."""
+    page_number: int
+    s3_original_url: str
+    s3_thumbnail_url: str
+
+
 class DocumentResponse(BaseModel):
     """Document response model."""
     id: str
@@ -29,6 +36,7 @@ class DocumentResponse(BaseModel):
     s3_original_url: str
     s3_thumbnail_url: str
     created_at: datetime
+    pages: Optional[List[DocumentPageResponse]] = None
 
     class Config:
         from_attributes = True

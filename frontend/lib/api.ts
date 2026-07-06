@@ -34,6 +34,12 @@ export interface DocumentMetadataResponse {
   caption?: string;
 }
 
+export interface DocumentPageApiRecord {
+  page_number: number;
+  s3_original_url: string;
+  s3_thumbnail_url: string;
+}
+
 export interface DocumentApiRecord {
   id: string;
   family_id: string;
@@ -43,6 +49,7 @@ export interface DocumentApiRecord {
   s3_original_url: string;
   s3_thumbnail_url: string;
   created_at: string;
+  pages?: DocumentPageApiRecord[] | null;
 }
 
 export interface NotificationSettingsResponse {
@@ -139,6 +146,7 @@ class ApiClient {
   async uploadDocument(
     payload: {
       file?: File;
+      files?: File[];
       text?: string;
       custom_filename?: string;
       sender_id?: string;
@@ -169,6 +177,11 @@ class ApiClient {
     }
     if (payload.file) {
       formData.append('file', payload.file);
+    }
+    if (payload.files?.length) {
+      for (const f of payload.files) {
+        formData.append('files', f);
+      }
     }
 
     const url = `${this.baseUrl}/api/documents/upload`;

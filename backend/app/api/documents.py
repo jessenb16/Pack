@@ -9,9 +9,23 @@ from werkzeug.utils import secure_filename
 from app.core.database import get_db, get_org_filter
 from app.api.auth import get_current_user_light, get_org_id_light
 from app.models.document import DocumentResponse, DocumentMetadataPatch
-from app.models.document import LabelRef, DocumentMetadata
-from app.services.storage import upload_to_s3, delete_from_s3, get_signed_url, extract_s3_key_from_url
-from app.services.document_processor import process_document, text_to_pdf, _sanitize_filename, create_embedding
+from app.models.document import LabelRef, DocumentMetadata, DocumentPageResponse
+from app.services.storage import (
+    upload_to_s3,
+    upload_document_page_to_s3,
+    delete_document_assets_from_s3,
+    delete_from_s3,
+    get_signed_url,
+    extract_s3_key_from_url,
+)
+from app.services.document_processor import (
+    process_document,
+    process_multi_image_document,
+    text_to_pdf,
+    _sanitize_filename,
+    create_embedding,
+    IMAGE_EXTENSIONS,
+)
 from app.services.user_settings import get_document_uploaded_email_disabled
 from app.services.email_client import send_email, EmailSendError
 from app.services.notification_emails import build_document_uploaded_email
@@ -41,6 +55,33 @@ def allowed_file(filename: str) -> bool:
     """Check if file extension is allowed."""
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in settings.ALLOWED_EXTENSIONS
 
+
+def is_image_file(filename: str) -> bool:
+    """True if filename is an allowed image type (not PDF)."""
+    if '.' not in filename:
+        return False
+    return filename.rsplit('.', 1)[1].lower() in IMAGE_EXTENSIONS
+
+
+async def _read_ordered_upload_files(files: Optional[List[UploadFile]]) -> List[tuple[bytes, str]]:
+    """Read non-empty uploads preserving multipart order."""
+    if not files:
+        return []
+    result: List[tuple[bytes, str]] = []
+    for upload in files:
+        if not upload or not upload.filename or upload.filename in ("", "undefined"):
+            continue
+        data = await upload.read()
+        if not data:
+            continue
+        result.append((data, secure_filename(upload.filename)))
+    return result
+
+
+def _cleanup_uploaded_keys(keys: List[str]) -> None:
+    for key in keys:
+        if key:
+            delete_from_s3(key)
 def _doc_to_response(
     doc: Dict[str, Any],
     db: Database,
@@ -73,6 +114,26 @@ def _doc_to_response(
 
     recipient_model = LabelRef(id=r["id"], label=r["label"]) if r else None
 
+    pages_response: Optional[List[DocumentPageResponse]] = None
+    raw_pages = assets.get("pages")
+    if raw_pages and isinstance(raw_pages, list):
+        pages_response = []
+        for page in sorted(
+            (p for p in raw_pages if isinstance(p, dict)),
+            key=lambda p: p.get("page_number", 0),
+        ):
+            page_orig_key = extract_s3_key_from_url(page.get("s3_original_url", ""))
+            page_thumb_key = extract_s3_key_from_url(page.get("s3_thumbnail_url", ""))
+            pages_response.append(
+                DocumentPageResponse(
+                    page_number=int(page.get("page_number", 0)),
+                    s3_original_url=get_signed_url(page_orig_key) if page_orig_key else "",
+                    s3_thumbnail_url=get_signed_url(page_thumb_key) if page_thumb_key else "",
+                )
+            )
+        if not pages_response:
+            pages_response = None
+
     return DocumentResponse(
         id=str(doc["_id"]),
         family_id=org_id_doc,
@@ -88,6 +149,7 @@ def _doc_to_response(
         s3_original_url=original_signed_url,
         s3_thumbnail_url=thumbnail_signed_url,
         created_at=doc.get("created_at", datetime.now(timezone.utc)),
+        pages=pages_response,
     )
 
 
@@ -124,6 +186,142 @@ def _apply_metadata_and_ai(
         "embedding": embedding,
     }
     return metadata, ai_context
+
+
+async def _upload_multi_image_document(
+    *,
+    org_id: str,
+    db: Database,
+    current_user: dict,
+    upload_files: List[tuple[bytes, str]],
+    sender_entry: Dict[str, str],
+    event_entry: Dict[str, str],
+    recipient_entry: Optional[Dict[str, str]],
+    doc_date: str,
+    caption: str,
+    background_tasks: Optional[BackgroundTasks],
+) -> DocumentResponse:
+    """Ingest 2+ ordered images as one multi-page document."""
+    page_count = len(upload_files)
+    if page_count < 2:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Multi-image upload requires at least 2 images.",
+        )
+    if page_count > settings.MAX_MULTI_IMAGE_PAGES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Too many images. Maximum is {settings.MAX_MULTI_IMAGE_PAGES} pages per document.",
+        )
+
+    total_bytes = sum(len(data) for data, _ in upload_files)
+    if total_bytes > settings.MAX_MULTI_IMAGE_TOTAL_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=(
+                f"Total upload too large. Maximum size is "
+                f"{settings.MAX_MULTI_IMAGE_TOTAL_BYTES / (1024 * 1024)}MB"
+            ),
+        )
+
+    for _, filename in upload_files:
+        if not is_image_file(filename):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Multi-image uploads must be images only. PDFs cannot be combined with images.",
+            )
+
+    doc_id = ObjectId()
+    uploaded_keys: List[str] = []
+
+    try:
+        processed = process_multi_image_document(upload_files)
+        assets_pages: List[Dict[str, Any]] = []
+
+        for (file_data, _original_name), page in zip(upload_files, processed["pages"]):
+            page_filename = page["page_filename"]
+            thumb_filename = f"page_{page['page_number']:02d}.jpg"
+
+            original_key = upload_document_page_to_s3(
+                file_data, org_id, str(doc_id), page_filename, is_thumbnail=False
+            )
+            uploaded_keys.append(original_key)
+
+            thumb_key = upload_document_page_to_s3(
+                page["thumbnail_data"],
+                org_id,
+                str(doc_id),
+                thumb_filename,
+                is_thumbnail=True,
+            )
+            uploaded_keys.append(thumb_key)
+
+            assets_pages.append(
+                {
+                    "page_number": page["page_number"],
+                    "s3_original_url": original_key,
+                    "s3_thumbnail_url": thumb_key,
+                    "extracted_text": page.get("extracted_text", "") or "",
+                }
+            )
+
+        first_page = assets_pages[0]
+        extracted_text = processed.get("combined_extracted_text", "") or ""
+        cap = caption.strip()
+        metadata, ai_context = _apply_metadata_and_ai(
+            org_id,
+            db,
+            sender_entry,
+            event_entry,
+            recipient_entry,
+            doc_date,
+            cap,
+            extracted_text,
+        )
+
+        document = {
+            "_id": doc_id,
+            "org_id": org_id,
+            "uploader_id": current_user.get("clerk_user_id"),
+            "created_at": datetime.now(timezone.utc),
+            "metadata": metadata,
+            "assets": {
+                "file_type": "image/multi",
+                "s3_original_url": first_page["s3_original_url"],
+                "s3_thumbnail_url": first_page["s3_thumbnail_url"],
+                "pages": assets_pages,
+            },
+            "ai_context": ai_context,
+        }
+
+        db.documents.insert_one(document)
+        saved = db.documents.find_one({"_id": doc_id})
+        senders, events, recipients = get_catalog_for_org(org_id, db)
+
+        try:
+            if background_tasks is not None and saved:
+                background_tasks.add_task(
+                    _send_document_uploaded_emails_background,
+                    org_id=org_id,
+                    document_id=str(doc_id),
+                    uploader_id=str(current_user.get("clerk_user_id") or ""),
+                    db=db,
+                )
+        except Exception as e:
+            logger.error("Failed to enqueue notification background task: %s", e)
+
+        return _doc_to_response(saved, db, senders, events, recipients)
+
+    except HTTPException:
+        _cleanup_uploaded_keys(uploaded_keys)
+        raise
+    except Exception as e:
+        _cleanup_uploaded_keys(uploaded_keys)
+        logger.error(f"Error uploading multi-image document: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error processing multi-image document: {str(e)}",
+        )
 
 
 def _send_document_uploaded_emails_background(
@@ -343,18 +541,74 @@ async def upload_document(
     custom_filename: Optional[str] = Form(None),
     text: Optional[str] = Form(None),
     file: Optional[UploadFile] = File(None),
+    files: Optional[List[UploadFile]] = File(None),
     background_tasks: BackgroundTasks = None,
     current_user: dict = Depends(get_current_user_light),
     org_id: str = Depends(get_org_id_light),
     db: Database = Depends(get_db),
 ):
-    """Upload a new document. Accepts either a file (image/PDF) or plain text (generates PDF)."""
+    """Upload a new document. Accepts a file (image/PDF), multiple images, or plain text (PDF)."""
+
+    ordered_files = await _read_ordered_upload_files(files)
+
+    has_legacy_file = bool(
+        file and file.filename and file.filename not in ("", "undefined")
+    )
+    if has_legacy_file and ordered_files:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Provide either a single file or multiple images, not both.",
+        )
+
+    if len(ordered_files) >= 2:
+        if not caption or not caption.strip():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Caption is required. Please describe your document in one or two sentences.",
+            )
+        try:
+            sender_entry = resolve_label_from_id_or_text(
+                org_id, KIND_SENDER, sender_id, sender_label, db
+            )
+            event_entry = resolve_label_from_id_or_text(
+                org_id, KIND_EVENT, event_type_id, event_type_label, db
+            )
+            recipient_entry = optional_recipient(org_id, recipient_id, recipient_label, db)
+        except ValueError as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+        return await _upload_multi_image_document(
+            org_id=org_id,
+            db=db,
+            current_user=current_user,
+            upload_files=ordered_files,
+            sender_entry=sender_entry,
+            event_entry=event_entry,
+            recipient_entry=recipient_entry,
+            doc_date=doc_date,
+            caption=caption,
+            background_tasks=background_tasks,
+        )
 
     file_data = None
     filename = None
     content_type = "application/pdf"
 
-    if file and file.filename and file.filename not in ("", "undefined"):
+    if len(ordered_files) == 1:
+        file_data, filename = ordered_files[0]
+        if not allowed_file(filename):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"File type not allowed. Allowed types: {', '.join(settings.ALLOWED_EXTENSIONS)}",
+            )
+        ext = filename.rsplit(".", 1)[-1].lower()
+        if ext == "pdf":
+            content_type = "application/pdf"
+        elif ext in ("jpg", "jpeg", "jfif"):
+            content_type = "image/jpeg"
+        else:
+            content_type = f"image/{ext}"
+    elif has_legacy_file:
         if not allowed_file(file.filename):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -510,18 +764,14 @@ async def delete_document(
             detail="Only the document uploader can delete this document"
         )
 
-    assets = doc.get("assets", {})
-    original_key = extract_s3_key_from_url(
-        assets.get("s3_original_url") or doc.get("s3_original_url", "")
-    )
-    thumbnail_key = extract_s3_key_from_url(
-        assets.get("s3_thumbnail_url") or doc.get("s3_thumbnail_url", "")
-    )
-
-    if original_key:
-        delete_from_s3(original_key)
-    if thumbnail_key:
-        delete_from_s3(thumbnail_key)
+    assets = doc.get("assets", {}) or {}
+    if not assets.get("s3_original_url") and doc.get("s3_original_url"):
+        assets = {
+            **assets,
+            "s3_original_url": doc.get("s3_original_url"),
+            "s3_thumbnail_url": doc.get("s3_thumbnail_url"),
+        }
+    delete_document_assets_from_s3(assets)
 
     db.documents.delete_one({"_id": ObjectId(document_id)})
 

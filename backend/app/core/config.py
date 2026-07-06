@@ -39,6 +39,11 @@ class Settings(BaseSettings):
     # File Upload
     MAX_CONTENT_LENGTH: int = int(os.getenv("MAX_CONTENT_LENGTH", 16 * 1024 * 1024))  # 16MB
     ALLOWED_EXTENSIONS: set = {"png", "jpg", "jpeg", "gif", "pdf", "jfif", "webp"}
+    MAX_MULTI_IMAGE_PAGES: int = int(os.getenv("MAX_MULTI_IMAGE_PAGES", "5"))
+    MAX_MULTI_IMAGE_TOTAL_BYTES: int = int(
+        os.getenv("MAX_MULTI_IMAGE_TOTAL_BYTES", str(16 * 1024 * 1024))
+    )
+    VISION_IMAGE_MAX_EDGE: int = int(os.getenv("VISION_IMAGE_MAX_EDGE", "2048"))
     
     # Frontend
     FRONTEND_URL: str = os.getenv("FRONTEND_URL", "http://localhost:3000")

@@ -23,6 +23,20 @@ def get_s3_client():
     return _s3_client
 
 
+def _content_type_for_filename(filename: str) -> str:
+    file_ext = filename.lower().split(".")[-1] if "." in filename else ""
+    content_type_map = {
+        "jpg": "image/jpeg",
+        "jpeg": "image/jpeg",
+        "png": "image/png",
+        "gif": "image/gif",
+        "pdf": "application/pdf",
+        "jfif": "image/jpeg",
+        "webp": "image/webp",
+    }
+    return content_type_map.get(file_ext, "application/octet-stream")
+
+
 def upload_to_s3(file_data: bytes, family_id: str, filename: str, is_thumbnail: bool = False) -> str:
     """
     Upload file to S3 and return the S3 key (not a URL).
@@ -38,19 +52,8 @@ def upload_to_s3(file_data: bytes, family_id: str, filename: str, is_thumbnail: 
         else:
             s3_key = f"families/{family_id}/originals/{filename}"
         
-        # Determine content type based on file extension
-        file_ext = filename.lower().split('.')[-1] if '.' in filename else ''
-        content_type_map = {
-            'jpg': 'image/jpeg',
-            'jpeg': 'image/jpeg',
-            'png': 'image/png',
-            'gif': 'image/gif',
-            'pdf': 'application/pdf',
-            'jfif': 'image/jpeg',  # JFIF is a JPEG variant
-            'webp': 'image/webp'
-        }
-        content_type = content_type_map.get(file_ext, 'application/octet-stream')
-        
+        content_type = _content_type_for_filename(filename)
+
         s3_client.put_object(
             Bucket=settings.AWS_S3_BUCKET_NAME,
             Key=s3_key,
@@ -64,6 +67,69 @@ def upload_to_s3(file_data: bytes, family_id: str, filename: str, is_thumbnail: 
     except ClientError as e:
         logger.error(f"Error uploading to S3: {e}")
         raise
+
+
+def upload_document_page_to_s3(
+    file_data: bytes,
+    family_id: str,
+    document_id: str,
+    page_filename: str,
+    *,
+    is_thumbnail: bool = False,
+) -> str:
+    """
+    Upload a page of a multi-image document.
+
+    Keys: families/{org_id}/documents/{doc_id}/page_01.jpg
+          families/{org_id}/documents/{doc_id}/thumbnails/page_01.jpg
+    """
+    try:
+        s3_client = get_s3_client()
+        if is_thumbnail:
+            s3_key = f"families/{family_id}/documents/{document_id}/thumbnails/{page_filename}"
+        else:
+            s3_key = f"families/{family_id}/documents/{document_id}/{page_filename}"
+
+        content_type = _content_type_for_filename(page_filename)
+        s3_client.put_object(
+            Bucket=settings.AWS_S3_BUCKET_NAME,
+            Key=s3_key,
+            Body=file_data,
+            ContentType=content_type,
+        )
+        logger.info(f"Uploaded multi-image page to S3: {s3_key}")
+        return s3_key
+    except ClientError as e:
+        logger.error(f"Error uploading multi-image page to S3: {e}")
+        raise
+
+
+def collect_document_s3_keys(assets: dict) -> list[str]:
+    """Collect unique S3 keys from a document assets dict (single or multi-image)."""
+    keys: list[str] = []
+    seen: set[str] = set()
+
+    def add(key: str | None) -> None:
+        if not key:
+            return
+        normalized = extract_s3_key_from_url(key)
+        if normalized and normalized not in seen:
+            seen.add(normalized)
+            keys.append(normalized)
+
+    add(assets.get("s3_original_url"))
+    add(assets.get("s3_thumbnail_url"))
+    for page in assets.get("pages") or []:
+        if isinstance(page, dict):
+            add(page.get("s3_original_url"))
+            add(page.get("s3_thumbnail_url"))
+    return keys
+
+
+def delete_document_assets_from_s3(assets: dict) -> None:
+    """Delete all S3 objects for a document (deduped)."""
+    for key in collect_document_s3_keys(assets):
+        delete_from_s3(key)
 
 
 def get_signed_url(s3_key: str, expiration: int = 3600) -> str:
