@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File,
 from fastapi.responses import StreamingResponse
 from botocore.exceptions import ClientError
 from bson import ObjectId
+from bson.errors import InvalidId
 from datetime import datetime, timezone
 from typing import Optional, List, Any, Dict
 
@@ -488,18 +489,20 @@ async def get_document_content(
     """
     del current_user  # auth enforced by dependency
     try:
-        doc = db.documents.find_one({
-            "_id": ObjectId(document_id),
-            "$or": [
-                {"org_id": org_id},
-                {"family_id": org_id},
-            ],
-        })
-    except Exception:
+        oid = ObjectId(document_id)
+    except InvalidId:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Document not found",
         )
+
+    doc = db.documents.find_one({
+        "_id": oid,
+        "$or": [
+            {"org_id": org_id},
+            {"family_id": org_id},
+        ],
+    })
 
     if not doc:
         raise HTTPException(
@@ -538,7 +541,6 @@ async def get_document_content(
             detail=str(e),
         )
 
-    content_type = obj.get("ContentType") or "application/pdf"
     body = obj["Body"]
 
     def iter_chunks():
@@ -551,10 +553,11 @@ async def get_document_content(
 
     return StreamingResponse(
         iter_chunks(),
-        media_type=content_type,
+        media_type="application/pdf",
         headers={
             "Cache-Control": "private, no-store",
             "Content-Disposition": "inline",
+            "X-Content-Type-Options": "nosniff",
         },
     )
 
