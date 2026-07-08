@@ -257,6 +257,10 @@ class ApiClient {
     }
   }
 
+  documentContentUrl(documentId: string): string {
+    return `${this.baseUrl}/api/documents/${documentId}/content`;
+  }
+
   // Chat endpoints
   async askPack(query: string, sessionId?: string | null, token?: string | null) {
     // Note: conversation_history is no longer needed - handled by thread_id on backend

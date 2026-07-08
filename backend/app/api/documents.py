@@ -1,6 +1,9 @@
 """Documents API endpoints."""
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, Body, BackgroundTasks
+from fastapi.responses import StreamingResponse
+from botocore.exceptions import ClientError
 from bson import ObjectId
+from bson.errors import InvalidId
 from datetime import datetime, timezone
 from typing import Optional, List, Any, Dict
 
@@ -17,6 +20,7 @@ from app.services.storage import (
     delete_from_s3,
     get_signed_url,
     extract_s3_key_from_url,
+    open_s3_object,
 )
 from app.services.document_processor import (
     process_document,
@@ -468,6 +472,94 @@ async def get_document(
 
     senders, events, recipients = get_catalog_for_org(org_id, db)
     return _doc_to_response(doc, db, senders, events, recipients)
+
+
+@router.get("/{document_id}/content")
+async def get_document_content(
+    document_id: str,
+    current_user: dict = Depends(get_current_user_light),
+    org_id: str = Depends(get_org_id_light),
+    db: Database = Depends(get_db),
+):
+    """
+    Stream document bytes through the API (auth-gated).
+
+    PDF.js fetches via XHR/fetch, which requires CORS on S3; proxying here
+    avoids bucket CORS while keeping the same access checks as get_document.
+    """
+    del current_user  # auth enforced by dependency
+    try:
+        oid = ObjectId(document_id)
+    except InvalidId:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document not found",
+        )
+
+    doc = db.documents.find_one({
+        "_id": oid,
+        "$or": [
+            {"org_id": org_id},
+            {"family_id": org_id},
+        ],
+    })
+
+    if not doc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document not found",
+        )
+
+    assets = doc.get("assets", {})
+    original_key = extract_s3_key_from_url(
+        assets.get("s3_original_url") or doc.get("s3_original_url", "")
+    )
+    if not original_key:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document file not found",
+        )
+
+    file_type = (doc.get("file_type") or "").lower()
+    if file_type != "application/pdf" and not original_key.lower().endswith(".pdf"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Document is not a PDF",
+        )
+
+    try:
+        obj = open_s3_object(original_key)
+    except ClientError as e:
+        logger.error(f"Error streaming document {document_id} from S3: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document file not found",
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
+
+    body = obj["Body"]
+
+    def iter_chunks():
+        try:
+            for chunk in body.iter_chunks(chunk_size=1024 * 1024):
+                if chunk:
+                    yield chunk
+        finally:
+            body.close()
+
+    return StreamingResponse(
+        iter_chunks(),
+        media_type="application/pdf",
+        headers={
+            "Cache-Control": "private, no-store",
+            "Content-Disposition": "inline",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
 
 
 @router.patch("/{document_id}", response_model=DocumentResponse)

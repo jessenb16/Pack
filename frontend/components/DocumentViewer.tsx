@@ -516,7 +516,9 @@ export default function DocumentViewer({
                 className={`${contentLoaded ? '' : 'absolute inset-0 opacity-0'}`}
               >
                 <PdfScrollViewer
-                  url={doc.s3_original_url}
+                  contentUrl={apiClient.documentContentUrl(doc.id)}
+                  downloadUrl={doc.s3_original_url}
+                  getAuthToken={getAccessToken}
                   scale={scale}
                   onLoaded={() => setContentLoaded(true)}
                   onError={() => setContentLoaded(true)}
