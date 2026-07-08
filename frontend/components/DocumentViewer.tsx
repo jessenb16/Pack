@@ -4,6 +4,10 @@ import { X, ZoomIn, Download, Trash2, Loader2, Pencil } from 'lucide-react';
 import { formatDocDate } from '@/lib/date';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiClient, type DocumentApiRecord } from '@/lib/api';
+import PdfScrollViewer from '@/components/PdfScrollViewer';
+import ZoomableDocumentImage, {
+  DOCUMENT_VIEWER_ZOOM,
+} from '@/components/ZoomableDocumentImage';
 
 export type DocumentViewerDocument = DocumentApiRecord;
 
@@ -236,6 +240,9 @@ export default function DocumentViewer({
     setContentLoaded(true);
   };
 
+  const handleToggleZoom = () =>
+    setScale(scale > 1 ? 1 : DOCUMENT_VIEWER_ZOOM);
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/80 p-2 backdrop-blur-sm md:items-center md:p-8"
@@ -287,16 +294,14 @@ export default function DocumentViewer({
           </div>
 
           <div className="flex flex-shrink-0 flex-wrap gap-2">
-            {!isPdf && (
-              <button
-                onClick={() => setScale(scale > 1 ? 1 : 1.5)}
-                className="flex items-center gap-1 rounded-lg px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200 transition-colors"
-                title="Toggle Zoom"
-              >
-                <ZoomIn className="h-4 w-4" />
-                {scale > 1 ? 'Reset' : 'Zoom'}
-              </button>
-            )}
+            <button
+              onClick={handleToggleZoom}
+              className="flex items-center gap-1 rounded-lg px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200 transition-colors"
+              title="Toggle Zoom"
+            >
+              <ZoomIn className="h-4 w-4" />
+              {scale > 1 ? 'Reset' : 'Zoom'}
+            </button>
             {canEdit && (
               <button
                 type="button"
@@ -490,7 +495,11 @@ export default function DocumentViewer({
           </div>
         )}
 
-        <div className="relative min-h-0 flex-1 overflow-auto bg-gray-100 p-4">
+        <div
+          data-document-viewer-scroll
+          className="relative min-h-0 flex-1 overflow-auto overscroll-contain bg-gray-100 p-4"
+          style={{ touchAction: 'pan-x pan-y pinch-zoom' }}
+        >
           {isPdf ? (
             <>
               {!contentLoaded && doc.s3_thumbnail_url && (
@@ -503,12 +512,17 @@ export default function DocumentViewer({
                   />
                 </div>
               )}
-              <iframe
-                src={doc.s3_original_url}
-                className={`h-full min-h-[60vh] w-full rounded shadow-sm bg-white ${contentLoaded ? 'block' : 'absolute inset-0 opacity-0'}`}
-                title="PDF Viewer"
-                onLoad={() => setContentLoaded(true)}
-              />
+              <div
+                className={`${contentLoaded ? '' : 'absolute inset-0 opacity-0'}`}
+              >
+                <PdfScrollViewer
+                  url={doc.s3_original_url}
+                  scale={scale}
+                  onLoaded={() => setContentLoaded(true)}
+                  onError={() => setContentLoaded(true)}
+                  onToggleZoom={handleToggleZoom}
+                />
+              </div>
               {!contentLoaded && (
                 <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-white/70">
                   <Loader2 className="h-10 w-10 animate-spin text-gray-600" aria-hidden />
@@ -538,19 +552,13 @@ export default function DocumentViewer({
                     <p className="mb-2 text-center text-sm font-medium text-gray-600">
                       Page {page.page_number} of {sortedPages.length}
                     </p>
-                    <div
-                      className={`flex justify-center ${
-                        scale > 1 ? 'cursor-zoom-out' : 'cursor-zoom-in'
-                      }`}
-                      onClick={() => setScale(scale > 1 ? 1 : 1.5)}
-                    >
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
+                    <div className="flex justify-center">
+                      <ZoomableDocumentImage
                         src={page.s3_original_url}
                         alt={`Document page ${page.page_number}`}
-                        className="max-h-[70vh] w-auto max-w-full rounded shadow-md object-contain"
-                        style={{ transform: `scale(${scale})` }}
+                        scale={scale}
                         onLoad={handleMultiPageImageLoad}
+                        onToggleZoom={handleToggleZoom}
                       />
                     </div>
                   </div>
@@ -576,17 +584,17 @@ export default function DocumentViewer({
                 </div>
               )}
               <div
-                className={`flex items-center justify-center ${contentLoaded ? '' : 'absolute inset-0 opacity-0'} ${scale > 1 ? 'cursor-zoom-out' : 'cursor-zoom-in'}`}
-                onClick={() => setScale(scale > 1 ? 1 : 1.5)}
+                className={`flex items-center justify-center ${contentLoaded ? '' : 'absolute inset-0 opacity-0'}`}
               >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={doc.s3_original_url}
-                  alt="Document"
-                  className="max-h-[70vh] max-w-full w-auto object-contain rounded shadow-md"
-                  style={{ transform: `scale(${scale})` }}
-                  onLoad={() => setContentLoaded(true)}
-                />
+                <div className="w-full max-w-4xl">
+                  <ZoomableDocumentImage
+                    src={doc.s3_original_url}
+                    alt="Document"
+                    scale={scale}
+                    onLoad={() => setContentLoaded(true)}
+                    onToggleZoom={handleToggleZoom}
+                  />
+                </div>
               </div>
               {!contentLoaded && (
                 <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-white/70">
