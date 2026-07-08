@@ -9,7 +9,11 @@ type PdfPageImage = {
 };
 
 interface PdfScrollViewerProps {
-  url: string;
+  /** Authenticated API URL that streams the PDF (avoids S3 CORS). */
+  contentUrl: string;
+  /** Presigned URL for download / open-in-new-tab fallback. */
+  downloadUrl: string;
+  getAuthToken?: () => Promise<string | null>;
   scale?: number;
   onLoaded?: () => void;
   onError?: (message: string) => void;
@@ -17,7 +21,9 @@ interface PdfScrollViewerProps {
 }
 
 export default function PdfScrollViewer({
-  url,
+  contentUrl,
+  downloadUrl,
+  getAuthToken,
   scale = 1,
   onLoaded,
   onError,
@@ -31,9 +37,11 @@ export default function PdfScrollViewer({
   const loadingTaskRef = useRef<{ destroy: () => Promise<void> } | null>(null);
   const onLoadedRef = useRef(onLoaded);
   const onErrorRef = useRef(onError);
+  const getAuthTokenRef = useRef(getAuthToken);
 
   onLoadedRef.current = onLoaded;
   onErrorRef.current = onError;
+  getAuthTokenRef.current = getAuthToken;
 
   useEffect(() => {
     cancelledRef.current = false;
@@ -44,8 +52,17 @@ export default function PdfScrollViewer({
     async function load() {
       try {
         const pdfjs = await import('pdfjs-dist/webpack.mjs');
+        const token = getAuthTokenRef.current
+          ? await getAuthTokenRef.current()
+          : null;
+        const httpHeaders: Record<string, string> = {};
+        if (token) {
+          httpHeaders.Authorization = `Bearer ${token}`;
+        }
+
         const loadingTask = pdfjs.getDocument({
-          url,
+          url: contentUrl,
+          httpHeaders,
           withCredentials: false,
         });
         loadingTaskRef.current = loadingTask;
@@ -114,7 +131,7 @@ export default function PdfScrollViewer({
       void loadingTaskRef.current?.destroy();
       loadingTaskRef.current = null;
     };
-  }, [url]);
+  }, [contentUrl]);
 
   if (error) {
     return (
@@ -122,7 +139,7 @@ export default function PdfScrollViewer({
         <p className="text-sm font-medium text-red-600">Could not load PDF</p>
         <p className="text-xs text-gray-500">{error}</p>
         <a
-          href={url}
+          href={downloadUrl}
           target="_blank"
           rel="noopener noreferrer"
           className="text-sm font-medium text-blue-600 hover:underline"

@@ -132,6 +132,17 @@ def delete_document_assets_from_s3(assets: dict) -> None:
         delete_from_s3(key)
 
 
+def open_s3_object(s3_key: str) -> dict:
+    """
+    Fetch an object from S3. Caller must read/close the returned ``Body`` stream.
+    """
+    key = extract_s3_key_from_url(s3_key)
+    if not key:
+        raise ValueError("Missing S3 key")
+    s3_client = get_s3_client()
+    return s3_client.get_object(Bucket=settings.AWS_S3_BUCKET_NAME, Key=key)
+
+
 def get_signed_url(s3_key: str, expiration: int = 3600) -> str:
     """
     Generate a presigned URL for a private S3 object.
