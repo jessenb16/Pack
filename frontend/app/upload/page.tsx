@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import Navbar from '@/components/Navbar';
 import { apiClient } from '@/lib/api';
 import type { LabelCatalog } from '@/components/DocumentViewer';
-import { Upload as UploadIcon, Loader2, FileText, GripVertical, X } from 'lucide-react';
+import { Upload as UploadIcon, Loader2, FileText, GripVertical, X, ChevronUp, ChevronDown } from 'lucide-react';
 import { getTodayLocalDateString } from '@/lib/date';
 
 /** Mirror backend MAX_MULTI_IMAGE_PAGES */
@@ -80,6 +80,15 @@ export default function UploadPage() {
   const [recipientId, setRecipientId] = useState('');
   const [recipientNew, setRecipientNew] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [enableDragReorder, setEnableDragReorder] = useState(false);
+
+  useEffect(() => {
+    const mq = window.matchMedia('(hover: hover) and (pointer: fine)');
+    const update = () => setEnableDragReorder(mq.matches);
+    update();
+    mq.addEventListener('change', update);
+    return () => mq.removeEventListener('change', update);
+  }, []);
 
   const loadFamilyData = useCallback(async () => {
     try {
@@ -182,6 +191,16 @@ export default function UploadPage() {
       next.splice(toIndex, 0, moved);
       return next;
     });
+  }
+
+  function moveFileEarlier(index: number) {
+    if (index <= 0) return;
+    reorderFiles(index, index - 1);
+  }
+
+  function moveFileLater(index: number) {
+    if (index >= orderedFiles.length - 1) return;
+    reorderFiles(index, index + 1);
   }
 
   function handleDragStart(index: number) {
@@ -353,7 +372,7 @@ export default function UploadPage() {
               </label>
               <p className="mb-3 text-xs text-gray-500">
                 Upload one PDF or image, or select multiple images (up to {MAX_MULTI_IMAGE_PAGES}) for a
-                multi-page document. Drag to reorder pages before uploading.
+                multi-page document. Drag to reorder on desktop, or use the arrows on mobile.
               </p>
               <div className="flex items-center justify-center rounded-lg border-2 border-dashed border-purple-200 bg-purple-50/30 p-6">
                 <div className="w-full text-center">
@@ -378,12 +397,18 @@ export default function UploadPage() {
                   {orderedFiles.map((item, index) => (
                     <div
                       key={item.id}
-                      draggable
-                      onDragStart={() => handleDragStart(index)}
-                      onDragOver={(e) => handleDragOver(e, index)}
-                      onDragEnd={handleDragEnd}
+                      draggable={enableDragReorder}
+                      onDragStart={
+                        enableDragReorder ? () => handleDragStart(index) : undefined
+                      }
+                      onDragOver={
+                        enableDragReorder ? (e) => handleDragOver(e, index) : undefined
+                      }
+                      onDragEnd={enableDragReorder ? handleDragEnd : undefined}
                       className={`relative rounded-lg border bg-gray-50 p-2 ${
-                        dragIndex === index ? 'border-purple-500 ring-2 ring-purple-200' : 'border-gray-200'
+                        enableDragReorder && dragIndex === index
+                          ? 'border-purple-500 ring-2 ring-purple-200'
+                          : 'border-gray-200'
                       }`}
                     >
                       <span className="absolute left-2 top-2 z-10 rounded bg-purple-600 px-1.5 py-0.5 text-xs font-semibold text-white">
@@ -409,8 +434,33 @@ export default function UploadPage() {
                           <FileText className="h-10 w-10 text-gray-400" />
                         )}
                       </div>
+                      {orderedFiles.length > 1 && (
+                        <div className="mt-2 flex justify-center gap-1 sm:hidden">
+                          <button
+                            type="button"
+                            onClick={() => moveFileEarlier(index)}
+                            disabled={index === 0}
+                            className="rounded-md border border-gray-300 bg-white p-2 text-gray-700 disabled:cursor-not-allowed disabled:opacity-40"
+                            aria-label={`Move page ${index + 1} earlier`}
+                          >
+                            <ChevronUp className="h-4 w-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => moveFileLater(index)}
+                            disabled={index === orderedFiles.length - 1}
+                            className="rounded-md border border-gray-300 bg-white p-2 text-gray-700 disabled:cursor-not-allowed disabled:opacity-40"
+                            aria-label={`Move page ${index + 1} later`}
+                          >
+                            <ChevronDown className="h-4 w-4" />
+                          </button>
+                        </div>
+                      )}
                       <div className="mt-2 flex items-center gap-1 text-xs text-gray-600">
-                        <GripVertical className="h-3.5 w-3.5 flex-shrink-0 text-gray-400" aria-hidden />
+                        <GripVertical
+                          className="hidden h-3.5 w-3.5 flex-shrink-0 text-gray-400 sm:block"
+                          aria-hidden
+                        />
                         <span className="truncate" title={item.file.name}>
                           {item.file.name}
                         </span>
