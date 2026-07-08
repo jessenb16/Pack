@@ -519,6 +519,7 @@ export default function DocumentViewer({
                   url={doc.s3_original_url}
                   scale={scale}
                   onLoaded={() => setContentLoaded(true)}
+                  onError={() => setContentLoaded(true)}
                   onToggleZoom={handleToggleZoom}
                 />
               </div>

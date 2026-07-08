@@ -434,8 +434,8 @@ export default function UploadPage() {
                           <FileText className="h-10 w-10 text-gray-400" />
                         )}
                       </div>
-                      {orderedFiles.length > 1 && (
-                        <div className="mt-2 flex justify-center gap-1 sm:hidden">
+                      {!enableDragReorder && orderedFiles.length > 1 && (
+                        <div className="mt-2 flex justify-center gap-1">
                           <button
                             type="button"
                             onClick={() => moveFileEarlier(index)}
