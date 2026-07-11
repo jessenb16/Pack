@@ -3,6 +3,57 @@
 import { useEffect, useRef, useState } from 'react';
 import ZoomableDocumentImage from '@/components/ZoomableDocumentImage';
 
+// ============================================================================
+// Polyfill for older/mobile browser engines missing new Map caching features
+// used by pdfjs-dist v6+
+// ============================================================================
+
+// 1. Teach TypeScript about the new methods so the editor stops complaining
+declare global {
+  interface Map<K, V> {
+    getOrInsertComputed(key: K, callback: (key: K) => V): V;
+  }
+  interface WeakMap<K extends WeakKey, V> {
+    getOrInsertComputed(key: K, callback: (key: K) => V): V;
+  }
+}
+
+// 2. Actually apply the polyfill safely without type clashing
+if (typeof window !== 'undefined') {
+  
+  if (typeof Map !== 'undefined' && !('getOrInsertComputed' in Map.prototype)) {
+    Object.defineProperty(Map.prototype, 'getOrInsertComputed', {
+      value: function <K, V>(this: Map<K, V>, key: K, callback: (key: K) => V): V {
+        if (this.has(key)) {
+          return this.get(key) as V;
+        }
+        const val = callback(key);
+        this.set(key, val);
+        return val;
+      },
+      writable: true,
+      configurable: true,
+    });
+  }
+
+  if (typeof WeakMap !== 'undefined' && !('getOrInsertComputed' in WeakMap.prototype)) {
+    Object.defineProperty(WeakMap.prototype, 'getOrInsertComputed', {
+      value: function <K extends WeakKey, V>(this: WeakMap<K, V>, key: K, callback: (key: K) => V): V {
+        if (this.has(key)) {
+          return this.get(key) as V;
+        }
+        const val = callback(key);
+        this.set(key, val);
+        return val;
+      },
+      writable: true,
+      configurable: true,
+    });
+  }
+  
+}
+// ============================================================================
+
 type PdfPageImage = {
   pageNumber: number;
   src: string;
