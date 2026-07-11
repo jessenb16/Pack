@@ -19,28 +19,26 @@ declare global {
 }
 
 // 2. Actually apply the polyfill to the browser environment
-if (typeof window !== 'undefined') {
-  if (typeof Map !== 'undefined' && !Map.prototype.getOrInsertComputed) {
-    Map.prototype.getOrInsertComputed = function (key: any, callback: Function) {
-      if (this.has(key)) {
-        return this.get(key);
-      }
-      const val = callback(key);
-      this.set(key, val);
-      return val;
-    };
-  }
+if (typeof globalThis !== 'undefined') {
+  const defineGetOrInsertComputed = (proto: any) => {
+    if (typeof proto.getOrInsertComputed === 'function') return;
 
-  if (typeof WeakMap !== 'undefined' && !WeakMap.prototype.getOrInsertComputed) {
-    WeakMap.prototype.getOrInsertComputed = function (key: any, callback: Function) {
-      if (this.has(key)) {
-        return this.get(key);
-      }
-      const val = callback(key);
-      this.set(key, val);
-      return val;
-    };
-  }
+    Object.defineProperty(proto, 'getOrInsertComputed', {
+      value: function (this: any, key: any, callback: (key: any) => any) {
+        if (this.has(key)) {
+          return this.get(key);
+        }
+        const val = callback(key);
+        this.set(key, val);
+        return val;
+      },
+      writable: true,
+      configurable: true,
+    });
+  };
+
+  if (typeof Map !== 'undefined') defineGetOrInsertComputed(Map.prototype);
+  if (typeof WeakMap !== 'undefined') defineGetOrInsertComputed(WeakMap.prototype);
 }
 // ============================================================================
 
