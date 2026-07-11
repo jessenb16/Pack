@@ -18,15 +18,14 @@ declare global {
   }
 }
 
-// 2. Actually apply the polyfill to the browser environment
-if (typeof globalThis !== 'undefined') {
-  const defineGetOrInsertComputed = (proto: any) => {
-    if (typeof proto.getOrInsertComputed === 'function') return;
-
-    Object.defineProperty(proto, 'getOrInsertComputed', {
-      value: function (this: any, key: any, callback: (key: any) => any) {
+// 2. Actually apply the polyfill safely without type clashing
+if (typeof window !== 'undefined') {
+  
+  if (typeof Map !== 'undefined' && !('getOrInsertComputed' in Map.prototype)) {
+    Object.defineProperty(Map.prototype, 'getOrInsertComputed', {
+      value: function <K, V>(this: Map<K, V>, key: K, callback: (key: K) => V): V {
         if (this.has(key)) {
-          return this.get(key);
+          return this.get(key) as V;
         }
         const val = callback(key);
         this.set(key, val);
@@ -35,10 +34,23 @@ if (typeof globalThis !== 'undefined') {
       writable: true,
       configurable: true,
     });
-  };
+  }
 
-  if (typeof Map !== 'undefined') defineGetOrInsertComputed(Map.prototype);
-  if (typeof WeakMap !== 'undefined') defineGetOrInsertComputed(WeakMap.prototype);
+  if (typeof WeakMap !== 'undefined' && !('getOrInsertComputed' in WeakMap.prototype)) {
+    Object.defineProperty(WeakMap.prototype, 'getOrInsertComputed', {
+      value: function <K extends WeakKey, V>(this: WeakMap<K, V>, key: K, callback: (key: K) => V): V {
+        if (this.has(key)) {
+          return this.get(key) as V;
+        }
+        const val = callback(key);
+        this.set(key, val);
+        return val;
+      },
+      writable: true,
+      configurable: true,
+    });
+  }
+  
 }
 // ============================================================================
 
