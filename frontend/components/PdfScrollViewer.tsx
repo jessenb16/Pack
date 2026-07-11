@@ -139,7 +139,9 @@ export default function PdfScrollViewer({
           const page = await pdf.getPage(pageNum);
           const baseViewport = page.getViewport({ scale: 1 });
           const fitScale = Math.min(maxWidth / baseViewport.width, 2);
-          const viewport = page.getViewport({ scale: fitScale });
+          // Detect retina/high-DPI screens and safely cap the multiplier at 2x
+          const safeDpr = Math.min(window.devicePixelRatio || 1, 2);
+          const viewport = page.getViewport({ scale: fitScale * safeDpr });
 
           const canvas = document.createElement('canvas');
           const context = canvas.getContext('2d');
