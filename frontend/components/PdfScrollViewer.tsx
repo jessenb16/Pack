@@ -3,6 +3,47 @@
 import { useEffect, useRef, useState } from 'react';
 import ZoomableDocumentImage from '@/components/ZoomableDocumentImage';
 
+// ============================================================================
+// Polyfill for older/mobile browser engines missing new Map caching features
+// used by pdfjs-dist v6+
+// ============================================================================
+
+// 1. Teach TypeScript about the new methods so the editor stops complaining
+declare global {
+  interface Map<K, V> {
+    getOrInsertComputed(key: K, callback: (key: K) => V): V;
+  }
+  interface WeakMap<K extends WeakKey, V> {
+    getOrInsertComputed(key: K, callback: (key: K) => V): V;
+  }
+}
+
+// 2. Actually apply the polyfill to the browser environment
+if (typeof window !== 'undefined') {
+  if (typeof Map !== 'undefined' && !Map.prototype.getOrInsertComputed) {
+    Map.prototype.getOrInsertComputed = function (key: any, callback: Function) {
+      if (this.has(key)) {
+        return this.get(key);
+      }
+      const val = callback(key);
+      this.set(key, val);
+      return val;
+    };
+  }
+
+  if (typeof WeakMap !== 'undefined' && !WeakMap.prototype.getOrInsertComputed) {
+    WeakMap.prototype.getOrInsertComputed = function (key: any, callback: Function) {
+      if (this.has(key)) {
+        return this.get(key);
+      }
+      const val = callback(key);
+      this.set(key, val);
+      return val;
+    };
+  }
+}
+// ============================================================================
+
 type PdfPageImage = {
   pageNumber: number;
   src: string;
